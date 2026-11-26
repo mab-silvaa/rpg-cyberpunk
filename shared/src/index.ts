@@ -1,4 +1,5 @@
 import type { FogShape, FogState } from "./fog.js";
+import type { RollReply, RollRequest, RollResult } from "./dice.js";
 import type { TokenMove, TokenView } from "./tokens.js";
 
 export const APP_NAME = "Salandra Cyberpunk";
@@ -104,6 +105,8 @@ export interface StateSnapshot {
   tokens: TokenView[];
   /** Mestre: fog de todas as cenas. Jogador: só a da cena ativa. */
   fogs: FogState[];
+  /** Histórico recente de rolagens; as secretas só vêm para o mestre. */
+  rolls: RollResult[];
 }
 
 /** Eventos que o cliente envia ao servidor. */
@@ -113,6 +116,8 @@ export interface ClientToServerEvents {
   "ruler:update": (line: RulerLine | null) => void;
   /** Arrasto de token. O servidor confere dono e papel; se recusar, devolve o token como está. */
   "token:move": (move: TokenMove) => void;
+  /** Rola dados no servidor; a resposta traz o resultado ou o erro. */
+  "dice:roll": (request: RollRequest, ack: (reply: RollReply) => void) => void;
 }
 
 /** Eventos que o servidor envia ao cliente. */
@@ -136,6 +141,8 @@ export interface ServerToClientEvents {
   "fog:set": (fog: FogState) => void;
   /** Uma forma nova de fog. */
   "fog:add": (sceneId: number, shape: FogShape) => void;
+  /** Rolagem nova (as secretas só chegam ao mestre). */
+  "dice:result": (roll: RollResult) => void;
 }
 
 export interface SocketData {
@@ -153,3 +160,4 @@ export const MAX_IMAGE_SIDE = 8192;
 export * from "./measure.js";
 export * from "./tokens.js";
 export * from "./fog.js";
+export * from "./dice.js";

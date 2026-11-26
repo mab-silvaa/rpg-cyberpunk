@@ -5,6 +5,9 @@ import {
   type ClientToServerEvents,
   type FogState,
   type PresenceUser,
+  type RollReply,
+  type RollRequest,
+  type RollResult,
   type RulerLine,
   type RulerState,
   type SceneSummary,
@@ -15,6 +18,7 @@ import {
   type User,
 } from "@vtt/shared";
 import { api } from "./api";
+import { DicePanel } from "./DicePanel";
 import { GmPanel } from "./GmPanel";
 import { MapView } from "./MapView";
 
@@ -29,6 +33,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [rulers, setRulers] = useState<RulerState[]>([]);
   // Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa.
   const [tokens, setTokens] = useState<TokenView[]>([]);
+  const [rolls, setRolls] = useState<RollResult[]>([]);
   const [fogs, setFogs] = useState<Record<number, FogState>>({});
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   // Só o mestre: lista de cenas e a cena que ele está olhando em prévia.
@@ -53,7 +58,9 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
       setRulers(snapshot.rulers);
       setTokens(snapshot.tokens);
       setFogs(Object.fromEntries(snapshot.fogs.map((f) => [f.sceneId, f])));
+      setRolls(snapshot.rolls);
     });
+    s.on("dice:result", (roll) => setRolls((current) => addRoll(current, roll)));
     s.on("fog:set", (fog) => setFogs((current) => ({ ...current, [fog.sceneId]: fog })));
     s.on("fog:add", (sceneId, shape) =>
       setFogs((current) => {
@@ -103,6 +110,20 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
       );
     }
   }, []);
+  const rollDice = useCallback(
+    (request: RollRequest) =>
+      new Promise<RollReply>((resolve) => {
+        const socket = socketRef.current;
+        if (!socket?.connected) {
+          return resolve({ ok: false, error: "Sem conexão com a mesa. Espere reconectar" });
+        }
+        socket.emit("dice:roll", request, (reply) => {
+          if (reply.ok) setRolls((current) => addRoll(current, reply.roll));
+          resolve(reply);
+        });
+      }),
+    [],
+  );
   const changeToken = useCallback(
     (token: TokenView) => setTokens((current) => upsertToken(current, token)),
     [],
@@ -165,6 +186,8 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         onLeavePreview={() => setPreviewId(null)}
       />
 
+      <DicePanel rolls={rolls} isGm={user.isGm} onRoll={rollDice} />
+
       <section className="card">
         <h2>Na mesa</h2>
         <ul className="players">
@@ -200,6 +223,12 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
 
 const noRuler = (): void => undefined;
 const noSelect = (): void => undefined;
+
+/** Acrescenta a rolagem ao histórico (sem repetir) e mantém só as últimas 100. */
+function addRoll(list: RollResult[], roll: RollResult): RollResult[] {
+  if (list.some((r) => r.id === roll.id)) return list;
+  return [...list, roll].slice(-100);
+}
 
 function upsertToken(list: TokenView[], token: TokenView): TokenView[] {
   return list.some((t) => t.id === token.id)

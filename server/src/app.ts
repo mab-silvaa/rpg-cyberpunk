@@ -30,6 +30,7 @@ import { normalizeName, Presence, Users } from "./users.js";
 import { Images } from "./images.js";
 import { registerMapRoutes, registerMapSocket, snapshotFor } from "./map.js";
 import { Scenes } from "./scenes.js";
+import { registerDiceSocket, Rolls } from "./dice.js";
 import { Fog, registerFogRoutes } from "./fog.js";
 import { registerTokenRoutes, registerTokenSocket, TokenHub, Tokens } from "./tokens.js";
 
@@ -94,6 +95,7 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   const images = new Images(db, path.join(config.dataDir, "uploads"));
   const scenes = new Scenes(db, images);
   const fog = new Fog(db);
+  const rolls = new Rolls(db);
   const tokens = new Tokens(db, images, scenes, users, fog);
   // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
   images.sweepOrphans(24 * 60 * 60 * 1000);
@@ -262,10 +264,12 @@ export function createApp(config: Config, db: Database.Database): AppContext {
         rulers,
         tokenHub.attach(socket),
         user.isGm ? fog.all() : activeFog ? [activeFog] : [],
+        rolls.recent(user.isGm),
       ),
     );
     registerMapSocket(socket, rulers);
     registerTokenSocket(socket, tokens, tokenHub);
+    registerDiceSocket(socket, io, rolls);
     broadcastPresence();
 
     socket.on("echo:ping", (message, ack) => {

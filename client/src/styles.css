@@ -348,3 +348,70 @@ button.danger {
 .map-toolbar input[type="number"] {
   width: 4.5rem;
 }
+
+.dice-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.dice-form input:not([type="checkbox"]) {
+  flex: 1;
+  min-width: 10rem;
+}
+.dice-quick {
+  display: flex;
+  gap: 0.5rem;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+.dice-quick label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+}
+.dice-quick input[type="number"] {
+  width: 5rem;
+}
+.rolls {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.roll {
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--accent);
+  background: #0f1219;
+  border-radius: 4px;
+}
+.roll.secret {
+  border-left-color: #c0507a;
+}
+.roll-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.roll .total {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.term {
+  margin-right: 0.5rem;
+}
+.extra.explode {
+  color: var(--ok);
+  font-weight: 700;
+}
+.extra.fumble {
+  color: #ff5c7a;
+  font-weight: 700;
+}
+.badge.crit {
+  background: #ff5c7a;
+}

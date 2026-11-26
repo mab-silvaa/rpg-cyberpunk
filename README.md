@@ -15,7 +15,9 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 
 - Fase 4: fog of war por cena (guardada como lista de formas: retângulo e pincel, revelar ou cobrir, com desfazer, cobrir tudo e revelar tudo). O servidor não envia aos jogadores os tokens que estão sob fog
 
-Dados e fichas chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
+- Fase 5: dados no servidor (`crypto.randomInt`) com histórico guardado. Escreva rolagens como `2d6+3` ou `1d10!+8` (o `!` pede o teste do RED: 10 natural soma outro d10, 1 natural subtrai outro d10); dano em d6 marca crítico com dois ou mais 6. O mestre pode rolar em segredo
+
+Fichas, painel do mestre, backup e teste ponta a ponta chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
 
 ## Desenvolvimento no Linux
 

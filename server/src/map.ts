@@ -9,6 +9,7 @@ import type {
   SceneSummary,
   SceneView,
   FogState,
+  RollResult,
   StateSnapshot,
   TokenView,
 } from "@vtt/shared";
@@ -131,12 +132,14 @@ export function snapshotFor(
   rulers: Map<string, RulerState>,
   tokens: TokenView[],
   fogs: FogState[],
+  rolls: RollResult[],
 ): StateSnapshot {
   return {
     scene: scene ? toView(scene) : null,
     rulers: [...rulers.values()],
     tokens,
     fogs,
+    rolls,
   };
 }
 
