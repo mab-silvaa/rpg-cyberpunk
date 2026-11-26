@@ -28,11 +28,25 @@ import { InitiativeList } from "./InitiativePanel";
 import { GmPanel } from "./GmPanel";
 import { MapView } from "./MapView";
 
+/** Celular em pé: tela estreita, onde mexer no mapa seria impreciso. */
+function useNarrowScreen(): boolean {
+  const query = "(max-width: 700px)";
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setNarrow(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return narrow;
+}
+
 type Status = "conectando" | "conectado" | "desconectado";
 type VttSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [status, setStatus] = useState<Status>("conectando");
+  const narrow = useNarrowScreen();
   const [players, setPlayers] = useState<PresenceUser[]>([]);
   const socketRef = useRef<VttSocket>(null);
   const [activeScene, setActiveScene] = useState<SceneView | null>(null);
@@ -208,7 +222,14 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
       </header>
 
+      {status === "desconectado" && (
+        <div className="banner" role="alert">
+          Conexão perdida. Reconectando... (o mapa volta ao estado atual assim que reconectar)
+        </div>
+      )}
+
       <MapView
+        viewOnly={narrow}
         scene={shown}
         preview={preview !== undefined && preview.id !== activeScene?.id}
         // Na prévia as réguas da cena ativa não fazem sentido, e a régua do mestre não deve vazar.

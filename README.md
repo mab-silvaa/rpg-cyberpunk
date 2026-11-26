@@ -74,22 +74,30 @@ Em desenvolvimento (`npm start`), o servidor também lê o `.env` da raiz. Sem `
 
 ## Scripts
 
-| Comando              | O que faz                                             |
-| -------------------- | ----------------------------------------------------- |
-| `npm start`          | Desenvolvimento com recarga automática                |
-| `npm run build`      | Compila `shared`, `server` e `client`                 |
-| `npm run start:prod` | Roda o servidor compilado, que também entrega o front |
-| `npm test`           | Testes do servidor (Vitest)                           |
-| `npm run setup`      | Cria `data/` e o `.env` para rodar com Docker         |
-| `npm run lint`       | ESLint                                                |
-| `npm run typecheck`  | Verificação de tipos nos três pacotes                 |
-| `npm run format`     | Prettier (`format:check` só confere)                  |
+| Comando                          | O que faz                                                 |
+| -------------------------------- | --------------------------------------------------------- |
+| `npm start`                      | Desenvolvimento com recarga automática                    |
+| `npm run build`                  | Compila `shared`, `server` e `client`                     |
+| `npm run start:prod`             | Roda o servidor compilado, que também entrega o front     |
+| `npm test`                       | Testes do servidor (Vitest)                               |
+| `npm run setup`                  | Cria `data/` e o `.env` para rodar com Docker             |
+| `npm run backup`                 | Gera `backups/salandra-backup-DATA.zip` (banco + imagens) |
+| `npm run restore -- arquivo.zip` | Restaura um backup (`--force` se já houver dados)         |
+| `npm run lint`                   | ESLint                                                    |
+| `npm run typecheck`              | Verificação de tipos nos três pacotes                     |
+| `npm run format`                 | Prettier (`format:check` só confere)                      |
 
 ## Estrutura
 
 - `shared/`: tipos dos eventos e constantes usados por servidor e cliente
 - `server/`: Express, Socket.IO e SQLite; migrações numeradas em `server/migrations/`
 - `client/`: React + Vite
+
+## Backup e restauração
+
+Faça `npm run backup` antes de cada sessão importante e guarde uma cópia fora do computador. O painel do mestre avisa quando passa de 7 dias sem backup. Com Docker, rode no terminal da pasta do projeto: `docker compose exec app node server/dist/cli/backup.js` (o zip aparece em `backups/`).
+
+Para restaurar: pare o app (`docker compose down`), rode `npm run restore -- backups/ARQUIVO.zip --force` e suba de novo. Os dados anteriores nunca são apagados: ficam em `data.before-restore-DATA/`.
 
 ## Dados da campanha
 

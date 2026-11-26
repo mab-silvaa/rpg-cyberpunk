@@ -38,6 +38,11 @@ export interface TunnelInfo {
   error?: string;
 }
 
+export interface BackupStatus {
+  /** Quando foi feito o último backup (ISO), ou null se nunca. */
+  lastBackupAt: string | null;
+}
+
 export interface HealthResponse {
   status: "ok";
   version: string;

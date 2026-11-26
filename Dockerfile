@@ -26,7 +26,7 @@ COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/server/migrations server/migrations
 COPY --from=build /app/client/dist client/dist
 # O compose troca o usuário pelo seu (HOST_UID/HOST_GID) para os arquivos em data/ ficarem com você.
-RUN mkdir -p /app/data && chown node:node /app/data
+RUN mkdir -p /app/data /app/backups && chown node:node /app/data /app/backups
 USER node
 ENV PORT=3000 DATA_DIR=/app/data
 EXPOSE 3000

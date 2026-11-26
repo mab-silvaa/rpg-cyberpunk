@@ -1,3 +1,4 @@
+import { lastBackupAt } from "./backup.js";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -226,6 +227,10 @@ export function createApp(config: Config, db: Database.Database): AppContext {
       if (c) characterHub.update(c);
     }
     tokenHub.resync();
+  });
+
+  app.get("/api/backup-status", requireGm, (_req, res) => {
+    res.json({ lastBackupAt: lastBackupAt(config.dataDir) });
   });
 
   app.get("/api/tunnel", requireGm, async (_req, res) => {

@@ -8,11 +8,13 @@ services:
     environment:
       PORT: "3000"
       DATA_DIR: /app/data
+      BACKUP_DIR: /app/backups
       TRUST_PROXY: "1"
       TUNNEL_METRICS_URL: http://tunnel:2000/quicktunnel
     volumes:
       # :z ajusta o rótulo do SELinux (Fedora e similares) e não faz nada no Ubuntu e no Debian.
       - ./data:/app/data:z
+      - ./backups:/app/backups:z
     ports:
       # Só a sua máquina enxerga; os jogadores entram pelo tunnel.
       - "127.0.0.1:3000:3000"

@@ -75,6 +75,8 @@ interface Props {
   onMoveToken: (move: TokenMove) => void;
   onRuler: (line: RulerLine | null) => void;
   onLeavePreview: () => void;
+  /** Celular: só olhar (arrastar, régua e fog ficam desligados). */
+  viewOnly?: boolean;
 }
 
 const rulerColor = (userId: number): string => `hsl(${(userId * 67) % 360} 85% 62%)`;
@@ -126,6 +128,7 @@ export function MapView({
   preview,
   rulers,
   isGm,
+  viewOnly = false,
   selfId,
   tokens,
   fog,
@@ -139,7 +142,8 @@ export function MapView({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
-  const [tool, setTool] = useState<Tool>("mover");
+  const [pickedTool, setTool] = useState<Tool>("mover");
+  const tool: Tool = viewOnly ? "mover" : pickedTool;
   const [mine, setMine] = useState<RulerLine | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [brushPx, setBrushPx] = useState<number | null>(null);
@@ -189,7 +193,7 @@ export function MapView({
 
   const pointer = (stage: Konva.Stage) => stage.getRelativePointerPosition();
 
-  const fogOn = isGm && fog?.enabled === true;
+  const fogOn = isGm && !viewOnly && fog?.enabled === true;
   const fogTool = fogOn ? fogToolInfo(tool) : null;
   const brushSize = Math.min(
     FOG_BRUSH_MAX,
@@ -356,7 +360,7 @@ export function MapView({
                   gridPx={scene.gridPx}
                   map={map}
                   scale={view.scale}
-                  draggable={panning && (isGm || token.ownerId === selfId)}
+                  draggable={!viewOnly && panning && (isGm || token.ownerId === selfId)}
                   mine={token.ownerId === selfId}
                   selected={selectedTokenId === token.id}
                   onSelect={() => onSelectToken(token.id)}
@@ -405,12 +409,16 @@ export function MapView({
       )}
 
       <div className="map-toolbar">
-        <button className={tool === "mover" ? "on" : ""} onClick={() => setTool("mover")}>
-          Mover
-        </button>
-        <button className={tool === "regua" ? "on" : ""} onClick={() => setTool("regua")}>
-          Régua
-        </button>
+        {!viewOnly && (
+          <>
+            <button className={tool === "mover" ? "on" : ""} onClick={() => setTool("mover")}>
+              Mover
+            </button>
+            <button className={tool === "regua" ? "on" : ""} onClick={() => setTool("regua")}>
+              Régua
+            </button>
+          </>
+        )}
         {fogOn && (
           <>
             <span className="sep" />

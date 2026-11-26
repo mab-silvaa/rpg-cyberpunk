@@ -15,6 +15,7 @@ import type {
   SceneSummary,
   TokenInput,
   TokenView,
+  BackupStatus,
   TunnelInfo,
   User,
 } from "@vtt/shared";
@@ -50,6 +51,7 @@ export const api = {
   rename: (id: number, name: string) =>
     request<PresenceUser[]>("PATCH", `/api/users/${id}`, { name }),
   kick: (id: number) => request<void>("DELETE", `/api/users/${id}`),
+  backupStatus: () => request<BackupStatus>("GET", "/api/backup-status"),
   tunnel: () => request<TunnelInfo>("GET", "/api/tunnel"),
   scenes: () => request<SceneSummary[]>("GET", "/api/scenes"),
   createScene: (input: SceneInput) => request<SceneSummary[]>("POST", "/api/scenes", input),

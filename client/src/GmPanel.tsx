@@ -7,6 +7,7 @@ import type {
   SceneSummary,
   SceneView,
   TokenView,
+  BackupStatus,
   TunnelInfo,
   User,
 } from "@vtt/shared";
@@ -37,6 +38,9 @@ interface Props {
   onTokenRemove: (id: number) => void;
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const isBackupStale = (at: string | null): boolean => !at || Date.now() - Date.parse(at) > WEEK_MS;
+
 export function GmPanel({
   self,
   players,
@@ -56,6 +60,7 @@ export function GmPanel({
   onTokenRemove,
 }: Props) {
   const [tunnel, setTunnel] = useState<TunnelInfo>();
+  const [backup, setBackup] = useState<BackupStatus>();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -63,6 +68,10 @@ export function GmPanel({
     void api
       .tunnel()
       .then(setTunnel, () => setTunnel({ url: null, error: "Falha ao ler o tunnel" }));
+  }, []);
+
+  useEffect(() => {
+    void api.backupStatus().then(setBackup, () => undefined);
   }, []);
 
   async function copy(url: string) {
@@ -111,6 +120,15 @@ export function GmPanel({
       <p className="details">
         O link muda toda vez que o tunnel reinicia. Cole o link novo no Discord a cada sessão.
       </p>
+
+      {backup && isBackupStale(backup.lastBackupAt) && (
+        <p className="banner" role="status">
+          {backup.lastBackupAt
+            ? "Faz mais de 7 dias desde o último backup."
+            : "Você ainda não fez nenhum backup."}{" "}
+          No terminal: <code>npm run backup</code>
+        </p>
+      )}
 
       <ScenesPanel
         scenes={scenes}
