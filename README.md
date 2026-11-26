@@ -1,4 +1,4 @@
-# VTT Cyberpunk
+# Salandra Cyberpunk
 
 VTT (mesa virtual) próprio para a campanha de Cyberpunk RED: mapa com tokens em tempo real, fog of war, painel do mestre, dados e fichas. Um app Node.js + TypeScript que roda no PC do mestre; os jogadores entram por link e nome.
 
