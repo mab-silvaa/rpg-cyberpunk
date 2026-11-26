@@ -5,6 +5,7 @@ import {
   TOKEN_NAME_MAX_LENGTH,
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
+  isFogged,
   type ApiError,
   type TokenInput,
   type TokenMove,
@@ -12,7 +13,9 @@ import {
 } from "@vtt/shared";
 import type { VttServer, VttSocket } from "./app.js";
 import { imageUrl, type Images } from "./images.js";
+import type { Fog } from "./fog.js";
 import type { Scenes } from "./scenes.js";
+import type { User } from "@vtt/shared";
 import type { Users } from "./users.js";
 
 interface TokenRow {
@@ -122,6 +125,7 @@ export class Tokens {
     private images: Images,
     private scenes: Scenes,
     private users: Users,
+    private fog: Fog,
   ) {}
 
   /** Todos os tokens de todas as cenas (visão do mestre). */
@@ -130,24 +134,31 @@ export class Tokens {
     return (rows as TokenRow[]).map(toView);
   }
 
-  /** Tokens que um jogador pode ver: os não ocultos da cena ativa. */
-  visibleToPlayers(): TokenView[] {
-    const active = this.scenes.active();
-    if (!active) return [];
-    const rows = this.db
-      .prepare(`${SELECT} WHERE t.scene_id = ? AND t.hidden = 0 ORDER BY t.id`)
-      .all(active.id);
-    return (rows as TokenRow[]).map(toView);
-  }
-
   byId(id: number): TokenView | null {
     const row = this.db.prepare(`${SELECT} WHERE t.id = ?`).get(id);
     return row ? toView(row as TokenRow) : null;
   }
 
-  /** O jogador recebe este token? Só se não está oculto e é da cena ativa. */
-  isVisibleToPlayers(token: TokenView): boolean {
-    return !token.hidden && token.sceneId === this.scenes.active()?.id;
+  /** O centro do token está sob fog? */
+  isFogged(token: Pick<TokenView, "sceneId" | "x" | "y">): boolean {
+    const fog = this.fog.state(token.sceneId);
+    return fog !== null && isFogged(fog, token.x, token.y);
+  }
+
+  /**
+   * Este usuário recebe este token? O mestre vê todos. Jogador vê o que não está oculto, é da cena
+   * ativa e não está sob fog; o dono sempre vê o próprio token (se não está oculto).
+   */
+  canSee(user: User, token: TokenView, fogged?: boolean): boolean {
+    if (user.isGm) return true;
+    if (token.hidden || token.sceneId !== this.scenes.active()?.id) return false;
+    if (token.ownerId === user.id) return true;
+    return !(fogged ?? this.isFogged(token));
+  }
+
+  /** Tokens que este usuário recebe. */
+  visibleTo(user: User): TokenView[] {
+    return this.list().filter((token) => this.canSee(user, token));
   }
 
   private check(input: TokenInput): TokenError | null {
@@ -261,28 +272,101 @@ export class Tokens {
   }
 }
 
-/** Quem recebe o quê: o mestre vê todos os tokens; jogadores só os visíveis da cena ativa. */
+/**
+ * Quem recebe o quê. O mestre vê todos os tokens. Cada jogador recebe só os que pode ver, e a
+ * lista do que cada conexão já tem fica aqui, para mandar "novo" ou "some" na hora certa.
+ */
 export class TokenHub {
+  /** Tokens que cada conexão de jogador tem agora. */
+  private seen = new Map<string, Set<number>>();
+
   constructor(
     private io: VttServer,
     private tokens: Tokens,
   ) {}
 
+  /** Chamado ao conectar: devolve os tokens do snapshot e passa a acompanhar a conexão. */
+  attach(socket: VttSocket): TokenView[] {
+    const { user } = socket.data;
+    const list = this.tokens.visibleTo(user);
+    if (!user.isGm) this.seen.set(socket.id, new Set(list.map((t) => t.id)));
+    return list;
+  }
+
+  detach(socket: VttSocket): void {
+    this.seen.delete(socket.id);
+  }
+
+  private players(): VttSocket[] {
+    return [...this.io.sockets.sockets.values()].filter((s) => !s.data.user.isGm);
+  }
+
+  /** Token novo ou alterado. */
   upsert(token: TokenView): void {
     this.io.to("gm").emit("token:upsert", token);
-    if (this.tokens.isVisibleToPlayers(token)) this.io.to("players").emit("token:upsert", token);
-    // Se ficou oculto, quem o via precisa perdê-lo.
-    else this.io.to("players").emit("token:remove", token.id);
+    const fogged = this.tokens.isFogged(token);
+    for (const socket of this.players()) this.deliver(socket, token, fogged, "upsert");
+  }
+
+  /**
+   * Token arrastado para (x, y). Quem não era o autor recebe o movimento; quem passou a ver ou a
+   * deixar de ver o token (por causa da fog) recebe o token novo ou o "some".
+   */
+  moved(token: TokenView, x: number, y: number, fromSocketId: string): void {
+    const next = { ...token, x, y };
+    const fogged = this.tokens.isFogged(next);
+    for (const socket of this.io.sockets.sockets.values()) {
+      if (socket.id === fromSocketId) continue;
+      if (socket.data.user.isGm) socket.emit("token:move", token.id, x, y);
+      else this.deliver(socket, next, fogged, "move");
+    }
+  }
+
+  private deliver(
+    socket: VttSocket,
+    token: TokenView,
+    fogged: boolean,
+    kind: "upsert" | "move",
+  ): void {
+    const seen = this.seen.get(socket.id);
+    if (!seen) return;
+    const visible = this.tokens.canSee(socket.data.user, token, fogged);
+    const has = seen.has(token.id);
+    if (visible) {
+      seen.add(token.id);
+      if (kind === "move" && has) socket.emit("token:move", token.id, token.x, token.y);
+      else socket.emit("token:upsert", token);
+    } else if (has) {
+      seen.delete(token.id);
+      socket.emit("token:remove", token.id);
+    }
   }
 
   remove(id: number): void {
+    for (const seen of this.seen.values()) seen.delete(id);
     this.io.emit("token:remove", id);
   }
 
-  /** A cena ativa mudou ou foi apagada: manda a lista certa para cada papel. */
+  /** A cena ativa mudou ou foi apagada: manda a lista inteira certa para cada um. */
   resync(): void {
     this.io.to("gm").emit("tokens:set", this.tokens.list());
-    this.io.to("players").emit("tokens:set", this.tokens.visibleToPlayers());
+    for (const socket of this.players()) {
+      const list = this.tokens.visibleTo(socket.data.user);
+      this.seen.set(socket.id, new Set(list.map((t) => t.id)));
+      socket.emit("tokens:set", list);
+    }
+  }
+
+  /** A fog mudou: manda só a diferença (quem ficou à vista, quem sumiu). */
+  refresh(): void {
+    for (const socket of this.players()) {
+      const seen = this.seen.get(socket.id) ?? new Set<number>();
+      const now = this.tokens.visibleTo(socket.data.user);
+      const ids = new Set(now.map((t) => t.id));
+      for (const token of now) if (!seen.has(token.id)) socket.emit("token:upsert", token);
+      for (const id of seen) if (!ids.has(id)) socket.emit("token:remove", id);
+      this.seen.set(socket.id, ids);
+    }
   }
 }
 
@@ -338,17 +422,18 @@ export function registerTokenRoutes(deps: {
 const MIN_MOVE_INTERVAL_MS = 30;
 
 /** Arrasto de tokens por conexão. */
-export function registerTokenSocket(socket: VttSocket, tokens: Tokens): void {
+export function registerTokenSocket(socket: VttSocket, tokens: Tokens, hub: TokenHub): void {
   const { user } = socket.data;
   let lastDrag = 0;
 
   /** Devolve a quem tentou o estado verdadeiro do token (ou o some, se não pode vê-lo). */
   const correct = (id: number): void => {
     const token = tokens.byId(id);
-    if (token && (user.isGm || tokens.isVisibleToPlayers(token)))
-      socket.emit("token:upsert", token);
+    if (token && tokens.canSee(user, token)) socket.emit("token:upsert", token);
     else socket.emit("token:remove", id);
   };
+
+  socket.on("disconnect", () => hub.detach(socket));
 
   socket.on("token:move", (raw: TokenMove) => {
     const move = raw as Partial<TokenMove> | null;
@@ -364,9 +449,10 @@ export function registerTokenSocket(socket: VttSocket, tokens: Tokens): void {
     const token = tokens.byId(move.id);
     if (!token) return correct(move.id);
 
-    // Jogador só move o próprio token, se ele está visível (cena ativa e não oculto).
-    const allowed = user.isGm || (token.ownerId === user.id && tokens.isVisibleToPlayers(token));
-    if (!allowed) return correct(token.id);
+    // Jogador só move o próprio token, enquanto ele está à vista dele (cena ativa, não oculto).
+    if (!user.isGm && !(token.ownerId === user.id && tokens.canSee(user, token))) {
+      return correct(token.id);
+    }
 
     const now = Date.now();
     if (!move.final) {
@@ -377,9 +463,7 @@ export function registerTokenSocket(socket: VttSocket, tokens: Tokens): void {
     const pos = move.final
       ? tokens.move(token.id, move.x, move.y)!
       : tokens.clampedPosition(token, move.x, move.y);
-    if (tokens.isVisibleToPlayers(token))
-      socket.broadcast.emit("token:move", token.id, pos.x, pos.y);
-    else socket.to("gm").emit("token:move", token.id, pos.x, pos.y);
+    hub.moved(token, pos.x, pos.y, socket.id);
     // Se o servidor ajustou a posição (ficou fora do mapa), o próprio autor também precisa saber.
     if (move.final && (pos.x !== move.x || pos.y !== move.y)) {
       socket.emit("token:move", token.id, pos.x, pos.y);

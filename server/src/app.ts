@@ -30,6 +30,7 @@ import { normalizeName, Presence, Users } from "./users.js";
 import { Images } from "./images.js";
 import { registerMapRoutes, registerMapSocket, snapshotFor } from "./map.js";
 import { Scenes } from "./scenes.js";
+import { Fog, registerFogRoutes } from "./fog.js";
 import { registerTokenRoutes, registerTokenSocket, TokenHub, Tokens } from "./tokens.js";
 
 export type VttServer = Server<
@@ -92,7 +93,8 @@ export function createApp(config: Config, db: Database.Database): AppContext {
 
   const images = new Images(db, path.join(config.dataDir, "uploads"));
   const scenes = new Scenes(db, images);
-  const tokens = new Tokens(db, images, scenes, users);
+  const fog = new Fog(db);
+  const tokens = new Tokens(db, images, scenes, users, fog);
   // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
   images.sweepOrphans(24 * 60 * 60 * 1000);
 
@@ -208,11 +210,30 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     emitScene: (scene) => {
       // Ao trocar de cena, as réguas da cena antiga somem.
       clearRulers();
+      fog.invalidate();
       io.emit("scene:update", scene);
+      const active = scenes.active();
+      const activeFog = active ? fog.state(active.id) : null;
+      if (activeFog) io.to("players").emit("fog:set", activeFog);
       tokenHub.resync();
     },
   });
   registerTokenRoutes({ app, tokens, hub: tokenHub, requireGm });
+  registerFogRoutes({
+    app,
+    fog,
+    requireGm,
+    onSet: (state) => {
+      io.to("gm").emit("fog:set", state);
+      if (scenes.active()?.id === state.sceneId) io.to("players").emit("fog:set", state);
+      tokenHub.refresh();
+    },
+    onAdd: (sceneId, shape) => {
+      io.to("gm").emit("fog:add", sceneId, shape);
+      if (scenes.active()?.id === sceneId) io.to("players").emit("fog:add", sceneId, shape);
+      tokenHub.refresh();
+    },
+  });
 
   // Em produção o servidor entrega o front compilado; em desenvolvimento o Vite cuida disso.
   if (fs.existsSync(config.clientDir)) {
@@ -233,12 +254,18 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     void socket.join(user.isGm ? "gm" : "players");
     presence.add(user.id, socket.id);
     socket.emit("server:hello", { version: config.version, user });
+    const activeFog = scenes.active() ? fog.state(scenes.active()!.id) : null;
     socket.emit(
       "state:snapshot",
-      snapshotFor(scenes.active(), rulers, user.isGm ? tokens.list() : tokens.visibleToPlayers()),
+      snapshotFor(
+        scenes.active(),
+        rulers,
+        tokenHub.attach(socket),
+        user.isGm ? fog.all() : activeFog ? [activeFog] : [],
+      ),
     );
     registerMapSocket(socket, rulers);
-    registerTokenSocket(socket, tokens);
+    registerTokenSocket(socket, tokens, tokenHub);
     broadcastPresence();
 
     socket.on("echo:ping", (message, ack) => {

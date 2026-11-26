@@ -3,6 +3,7 @@ import { io, type Socket } from "socket.io-client";
 import {
   APP_NAME,
   type ClientToServerEvents,
+  type FogState,
   type PresenceUser,
   type RulerLine,
   type RulerState,
@@ -28,6 +29,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [rulers, setRulers] = useState<RulerState[]>([]);
   // Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa.
   const [tokens, setTokens] = useState<TokenView[]>([]);
+  const [fogs, setFogs] = useState<Record<number, FogState>>({});
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   // Só o mestre: lista de cenas e a cena que ele está olhando em prévia.
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
@@ -50,7 +52,16 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
       setActiveScene(snapshot.scene);
       setRulers(snapshot.rulers);
       setTokens(snapshot.tokens);
+      setFogs(Object.fromEntries(snapshot.fogs.map((f) => [f.sceneId, f])));
     });
+    s.on("fog:set", (fog) => setFogs((current) => ({ ...current, [fog.sceneId]: fog })));
+    s.on("fog:add", (sceneId, shape) =>
+      setFogs((current) => {
+        const fog = current[sceneId];
+        if (!fog || fog.shapes.some((x) => x.id === shape.id)) return current;
+        return { ...current, [sceneId]: { ...fog, shapes: [...fog.shapes, shape] } };
+      }),
+    );
     s.on("tokens:set", setTokens);
     s.on("token:upsert", (token) => setTokens((current) => upsertToken(current, token)));
     s.on("token:remove", (id) => setTokens((current) => current.filter((t) => t.id !== id)));
@@ -106,6 +117,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
     [previewId, scenes],
   );
   const shown = preview ?? activeScene;
+  const shownFog = shown ? (fogs[shown.id] ?? null) : null;
   const shownTokens = useMemo(
     () => (shown ? tokens.filter((t) => t.sceneId === shown.id) : []),
     [tokens, shown],
@@ -142,6 +154,10 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         isGm={user.isGm}
         selfId={user.id}
         tokens={shownTokens}
+        fog={shownFog}
+        onFogShape={(shape) => {
+          if (shown) void api.addFogShape(shown.id, shape).catch(() => undefined);
+        }}
         selectedTokenId={selectedTokenId}
         onSelectToken={user.isGm ? setSelectedTokenId : noSelect}
         onMoveToken={sendTokenMove}
@@ -171,6 +187,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           onPreview={setPreviewId}
           shownScene={shown}
           tokens={shownTokens}
+          fog={shownFog}
           selectedTokenId={selectedTokenId}
           onSelectToken={setSelectedTokenId}
           onTokenChange={changeToken}

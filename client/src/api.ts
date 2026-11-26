@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  FogShapeInput,
+  FogState,
   ImageInfo,
   LoginRequest,
   LoginResponse,
@@ -54,6 +56,16 @@ export const api = {
   updateToken: (id: number, input: TokenInput) =>
     request<TokenView>("PATCH", `/api/tokens/${id}`, input),
   deleteToken: (id: number) => request<void>("DELETE", `/api/tokens/${id}`),
+  fogEnabled: (sceneId: number, enabled: boolean) =>
+    request<FogState>("PATCH", `/api/scenes/${sceneId}/fog`, { enabled }),
+  addFogShape: (sceneId: number, shape: FogShapeInput) =>
+    request<unknown>("POST", `/api/scenes/${sceneId}/fog/shapes`, shape),
+  undoFog: (sceneId: number) =>
+    request<FogState>("DELETE", `/api/scenes/${sceneId}/fog/shapes/last`),
+  coverAllFog: (sceneId: number) =>
+    request<FogState>("POST", `/api/scenes/${sceneId}/fog/cover-all`),
+  revealAllFog: (sceneId: number) =>
+    request<FogState>("POST", `/api/scenes/${sceneId}/fog/reveal-all`),
   uploadImage: (file: File) => {
     const form = new FormData();
     form.append("file", file);

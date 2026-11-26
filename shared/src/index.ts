@@ -1,3 +1,4 @@
+import type { FogShape, FogState } from "./fog.js";
 import type { TokenMove, TokenView } from "./tokens.js";
 
 export const APP_NAME = "Salandra Cyberpunk";
@@ -101,6 +102,8 @@ export interface StateSnapshot {
   rulers: RulerState[];
   /** Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa. */
   tokens: TokenView[];
+  /** Mestre: fog de todas as cenas. Jogador: só a da cena ativa. */
+  fogs: FogState[];
 }
 
 /** Eventos que o cliente envia ao servidor. */
@@ -129,6 +132,10 @@ export interface ServerToClientEvents {
   "token:move": (id: number, x: number, y: number) => void;
   /** Troca a lista inteira de tokens (cena mudou, por exemplo). */
   "tokens:set": (tokens: TokenView[]) => void;
+  /** Fog inteira de uma cena (ligar, desligar, desfazer, cobrir ou revelar tudo, trocar de cena). */
+  "fog:set": (fog: FogState) => void;
+  /** Uma forma nova de fog. */
+  "fog:add": (sceneId: number, shape: FogShape) => void;
 }
 
 export interface SocketData {
@@ -145,3 +152,4 @@ export const SCENE_NAME_MAX_LENGTH = 60;
 export const MAX_IMAGE_SIDE = 8192;
 export * from "./measure.js";
 export * from "./tokens.js";
+export * from "./fog.js";

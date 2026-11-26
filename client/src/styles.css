@@ -203,7 +203,8 @@ button.danger {
 .map[data-tool="mover"]:active {
   cursor: grabbing;
 }
-.map[data-tool="regua"] {
+.map[data-tool="regua"],
+.map[data-tool="fog"] {
   cursor: crosshair;
 }
 .map-empty {
@@ -334,4 +335,16 @@ button.danger {
 }
 .scene-form select {
   width: 100%;
+}
+.fog-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.map-toolbar .sep {
+  width: 1px;
+  background: #262b3d;
+}
+.map-toolbar input[type="number"] {
+  width: 4.5rem;
 }

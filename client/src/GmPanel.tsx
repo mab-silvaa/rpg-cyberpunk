@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type {
+  FogState,
   PresenceUser,
   SceneSummary,
   SceneView,
@@ -8,6 +9,7 @@ import type {
   User,
 } from "@vtt/shared";
 import { api } from "./api";
+import { FogPanel } from "./FogPanel";
 import { ScenesPanel } from "./ScenesPanel";
 import { TokensPanel } from "./TokensPanel";
 
@@ -20,6 +22,7 @@ interface Props {
   onPreview: (id: number | null) => void;
   shownScene: SceneView | null;
   tokens: TokenView[];
+  fog: FogState | null;
   selectedTokenId: number | null;
   onSelectToken: (id: number | null) => void;
   onTokenChange: (token: TokenView) => void;
@@ -35,6 +38,7 @@ export function GmPanel({
   onPreview,
   shownScene,
   tokens,
+  fog,
   selectedTokenId,
   onSelectToken,
   onTokenChange,
@@ -103,6 +107,8 @@ export function GmPanel({
         previewId={previewId}
         onPreview={onPreview}
       />
+
+      <FogPanel scene={shownScene} fog={fog} />
 
       <TokensPanel
         scene={shownScene}

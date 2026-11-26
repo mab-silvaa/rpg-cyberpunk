@@ -8,6 +8,7 @@ import type {
   RulerState,
   SceneSummary,
   SceneView,
+  FogState,
   StateSnapshot,
   TokenView,
 } from "@vtt/shared";
@@ -129,8 +130,14 @@ export function snapshotFor(
   scene: SceneSummary | null,
   rulers: Map<string, RulerState>,
   tokens: TokenView[],
+  fogs: FogState[],
 ): StateSnapshot {
-  return { scene: scene ? toView(scene) : null, rulers: [...rulers.values()], tokens };
+  return {
+    scene: scene ? toView(scene) : null,
+    rulers: [...rulers.values()],
+    tokens,
+    fogs,
+  };
 }
 
 /** Eventos de mapa por conexão: régua. */
