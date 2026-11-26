@@ -1,0 +1,28 @@
+# Sobe o app e o tunnel da Cloudflare. Rode `npm run setup` uma vez antes, para criar data/ e .env.
+services:
+  app:
+    build: .
+    # Mesmo usuário do seu Linux, para os arquivos em data/ ficarem com você e não com o root.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    env_file: .env
+    environment:
+      PORT: "3000"
+      DATA_DIR: /app/data
+      TRUST_PROXY: "1"
+      TUNNEL_METRICS_URL: http://tunnel:2000/quicktunnel
+    volumes:
+      # :z ajusta o rótulo do SELinux (Fedora e similares) e não faz nada no Ubuntu e no Debian.
+      - ./data:/app/data:z
+    ports:
+      # Só a sua máquina enxerga; os jogadores entram pelo tunnel.
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    # Quick tunnel: sem conta nem domínio. O link muda toda vez que este container reinicia.
+    command: tunnel --no-autoupdate --url http://app:3000 --metrics 0.0.0.0:2000
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped

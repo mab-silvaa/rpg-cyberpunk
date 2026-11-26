@@ -1,67 +1,122 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import type { AddressInfo } from "node:net";
 import { io as connect, type Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ClientToServerEvents, HealthResponse, ServerToClientEvents } from "@vtt/shared";
-import { createApp, type AppContext } from "../src/app.js";
-import { openDatabase } from "../src/db.js";
+import type {
+  ClientToServerEvents,
+  HealthResponse,
+  PresenceUser,
+  ServerToClientEvents,
+} from "@vtt/shared";
+import { api, startServer, type TestServer } from "./helpers.js";
 
-let dataDir: string;
-let ctx: AppContext;
-let baseUrl: string;
-let client: Socket<ServerToClientEvents, ClientToServerEvents> | undefined;
+type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
+
+let server: TestServer;
+const clients: Client[] = [];
+
+const open = (cookie?: string): Client => {
+  const client: Client = connect(server.url, {
+    transports: ["websocket"],
+    extraHeaders: cookie ? { cookie } : {},
+    reconnection: false,
+  });
+  clients.push(client);
+  return client;
+};
 
 beforeEach(async () => {
-  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "vtt-app-"));
-  const db = openDatabase(dataDir);
-  ctx = createApp(
-    { port: 0, dataDir, clientDir: path.join(dataDir, "sem-client"), version: "9.9.9" },
-    db,
-  );
-  await new Promise<void>((resolve) => ctx.httpServer.listen(0, resolve));
-  baseUrl = `http://127.0.0.1:${(ctx.httpServer.address() as AddressInfo).port}`;
+  server = await startServer();
 });
 
 afterEach(async () => {
-  client?.disconnect();
-  await ctx.close();
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  for (const client of clients.splice(0)) client.disconnect();
+  await server.stop();
 });
 
 describe("servidor", () => {
   it("responde o health check com a versão", async () => {
-    const res = await fetch(`${baseUrl}/api/health`);
+    const res = await api<HealthResponse>(server, "GET", "/api/health");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as HealthResponse;
-    expect(body).toEqual({ status: "ok", version: "9.9.9" });
+    expect(res.body).toEqual({ status: "ok", version: "9.9.9" });
   });
 
   it("entrega o front compilado e cai no index.html em rotas desconhecidas", async () => {
-    const clientDir = path.join(dataDir, "client");
+    await server.stop();
+    const clientDir = path.join(process.env.TMPDIR ?? "/tmp", `vtt-front-${Date.now()}`);
     fs.mkdirSync(clientDir);
     fs.writeFileSync(path.join(clientDir, "index.html"), "<h1>front</h1>");
-    const db = openDatabase(path.join(dataDir, "db2"));
-    const other = createApp({ port: 0, dataDir, clientDir, version: "1" }, db);
-    await new Promise<void>((resolve) => other.httpServer.listen(0, resolve));
-    const url = `http://127.0.0.1:${(other.httpServer.address() as AddressInfo).port}`;
+    server = await startServer({ clientDir });
     try {
-      expect(await (await fetch(url)).text()).toContain("front");
-      expect(await (await fetch(`${url}/qualquer/rota`)).text()).toContain("front");
+      expect(await (await fetch(server.url)).text()).toContain("front");
+      expect(await (await fetch(`${server.url}/qualquer/rota`)).text()).toContain("front");
     } finally {
-      await other.close();
-      db.close();
+      fs.rmSync(clientDir, { recursive: true, force: true });
     }
   });
+});
 
-  it("cumprimenta o cliente por WebSocket e responde o eco", async () => {
-    client = connect(baseUrl, { transports: ["websocket"] });
-    const hello = await new Promise((resolve) => client!.once("server:hello", resolve));
-    expect(hello).toEqual({ version: "9.9.9" });
+describe("WebSocket", () => {
+  it("recusa conexão sem sessão", async () => {
+    const client = open();
+    const error = await new Promise<Error>((resolve) => client.once("connect_error", resolve));
+    expect(error.message).toBe("unauthorized");
+  });
+
+  it("cumprimenta quem tem sessão e responde o eco", async () => {
+    const { cookie } = await api(server, "POST", "/api/login", { body: { name: "Rita" } });
+    const client = open(cookie);
+    const hello = await new Promise<{ version: string; user: { name: string } }>((resolve) =>
+      client.once("server:hello", resolve),
+    );
+    expect(hello.version).toBe("9.9.9");
+    expect(hello.user.name).toBe("Rita");
 
     const reply = await client.emitWithAck("echo:ping", "olá");
     expect(reply.message).toBe("olá");
-    expect(reply.receivedAt).toBeGreaterThan(0);
+  });
+
+  it("avisa a todos quando alguém entra e sai", async () => {
+    const rita = await api(server, "POST", "/api/login", { body: { name: "Rita" } });
+    const bruno = await api(server, "POST", "/api/login", { body: { name: "Bruno" } });
+
+    const ritaClient = open(rita.cookie);
+    const onlineNames = (list: PresenceUser[]): string[] =>
+      list.filter((u) => u.online).map((u) => u.name);
+    await new Promise((resolve) => ritaClient.once("presence:update", resolve));
+
+    const sawBruno = new Promise<PresenceUser[]>((resolve) => {
+      ritaClient.on("presence:update", (list) => {
+        if (onlineNames(list).includes("Bruno")) resolve(list);
+      });
+    });
+    const brunoClient = open(bruno.cookie);
+    expect(onlineNames(await sawBruno)).toEqual(["Rita", "Bruno"]);
+
+    const sawLeave = new Promise<PresenceUser[]>((resolve) => {
+      ritaClient.on("presence:update", (list) => {
+        if (!onlineNames(list).includes("Bruno")) resolve(list);
+      });
+    });
+    brunoClient.disconnect();
+    expect(onlineNames(await sawLeave)).toEqual(["Rita"]);
+  });
+
+  it("desconecta quem o mestre expulsa", async () => {
+    const gm = await api(server, "POST", "/api/login", {
+      body: { name: "Mestre", gm: true, password: "senha-do-mestre" },
+    });
+    const rita = await api<{ user: { id: number } }>(server, "POST", "/api/login", {
+      body: { name: "Rita" },
+    });
+    const ritaClient = open(rita.cookie);
+    await new Promise((resolve) => ritaClient.once("server:hello", resolve));
+
+    const closed = new Promise<string>((resolve) => ritaClient.once("disconnect", resolve));
+    const res = await api(server, "DELETE", `/api/users/${rita.body.user.id}`, {
+      cookie: gm.cookie,
+    });
+    expect(res.status).toBe(204);
+    expect(await closed).toBe("io server disconnect");
   });
 });
