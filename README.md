@@ -74,24 +74,27 @@ Em desenvolvimento (`npm start`), o servidor também lê o `.env` da raiz. Sem `
 
 ## Scripts
 
-| Comando                          | O que faz                                                 |
-| -------------------------------- | --------------------------------------------------------- |
-| `npm start`                      | Desenvolvimento com recarga automática                    |
-| `npm run build`                  | Compila `shared`, `server` e `client`                     |
-| `npm run start:prod`             | Roda o servidor compilado, que também entrega o front     |
-| `npm test`                       | Testes do servidor (Vitest)                               |
-| `npm run setup`                  | Cria `data/` e o `.env` para rodar com Docker             |
-| `npm run backup`                 | Gera `backups/salandra-backup-DATA.zip` (banco + imagens) |
-| `npm run restore -- arquivo.zip` | Restaura um backup (`--force` se já houver dados)         |
-| `npm run lint`                   | ESLint                                                    |
-| `npm run typecheck`              | Verificação de tipos nos três pacotes                     |
-| `npm run format`                 | Prettier (`format:check` só confere)                      |
+| Comando                          | O que faz                                                             |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `npm start`                      | Desenvolvimento com recarga automática                                |
+| `npm run build`                  | Compila `shared`, `server` e `client`                                 |
+| `npm run start:prod`             | Roda o servidor compilado, que também entrega o front                 |
+| `npm test`                       | Testes do servidor (Vitest)                                           |
+| `npm run setup`                  | Cria `data/` e o `.env` para rodar com Docker                         |
+| `npm run backup`                 | Gera `backups/salandra-backup-DATA.zip` (banco + imagens)             |
+| `npm run restore -- arquivo.zip` | Restaura um backup (`--force` se já houver dados)                     |
+| `npm run e2e`                    | Teste ponta a ponta com dois navegadores (rode `npm run build` antes) |
+| `npm run lint`                   | ESLint                                                                |
+| `npm run typecheck`              | Verificação de tipos nos três pacotes                                 |
+| `npm run format`                 | Prettier (`format:check` só confere)                                  |
 
 ## Estrutura
 
 - `shared/`: tipos dos eventos e constantes usados por servidor e cliente
 - `server/`: Express, Socket.IO e SQLite; migrações numeradas em `server/migrations/`
 - `client/`: React + Vite
+
+Roteiro para testar com os amigos: [docs/teste-manual.md](docs/teste-manual.md).
 
 ## Backup e restauração
 
