@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type {
   CharacterView,
   FogState,
+  InitiativeView,
   PresenceUser,
   SceneSummary,
   SceneView,
@@ -11,6 +12,9 @@ import type {
 } from "@vtt/shared";
 import { api } from "./api";
 import { FogPanel } from "./FogPanel";
+import { InitiativeControls } from "./InitiativePanel";
+import { NotesPanel } from "./NotesPanel";
+import { NpcPanel } from "./NpcPanel";
 import { ScenesPanel } from "./ScenesPanel";
 import { TokensPanel } from "./TokensPanel";
 
@@ -25,6 +29,8 @@ interface Props {
   tokens: TokenView[];
   fog: FogState | null;
   characters: CharacterView[];
+  onCharacterCreated: (character: CharacterView) => void;
+  initiative: InitiativeView;
   selectedTokenId: number | null;
   onSelectToken: (id: number | null) => void;
   onTokenChange: (token: TokenView) => void;
@@ -42,6 +48,8 @@ export function GmPanel({
   tokens,
   fog,
   characters,
+  onCharacterCreated,
+  initiative,
   selectedTokenId,
   onSelectToken,
   onTokenChange,
@@ -123,6 +131,12 @@ export function GmPanel({
         onChange={onTokenChange}
         onRemove={onTokenRemove}
       />
+
+      <NpcPanel scene={shownScene} characters={characters} onCreated={onCharacterCreated} />
+
+      <InitiativeControls initiative={initiative} sceneTokens={tokens} />
+
+      <NotesPanel />
 
       <h3>Jogadores</h3>
       <ul className="players">

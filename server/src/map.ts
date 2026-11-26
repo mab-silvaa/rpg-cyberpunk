@@ -10,6 +10,7 @@ import type {
   SceneView,
   CharacterView,
   FogState,
+  InitiativeView,
   RollResult,
   StateSnapshot,
   TokenView,
@@ -135,6 +136,7 @@ export function snapshotFor(
   fogs: FogState[],
   rolls: RollResult[],
   characters: CharacterView[],
+  initiative: InitiativeView,
 ): StateSnapshot {
   return {
     scene: scene ? toView(scene) : null,
@@ -143,6 +145,7 @@ export function snapshotFor(
     fogs,
     rolls,
     characters,
+    initiative,
   };
 }
 

@@ -7,6 +7,7 @@ import {
   type CharacterView,
   type ClientToServerEvents,
   type FogState,
+  type InitiativeView,
   type PresenceUser,
   type RollReply,
   type RollRequest,
@@ -23,6 +24,7 @@ import {
 import { api } from "./api";
 import { CharactersPanel } from "./CharactersPanel";
 import { DicePanel } from "./DicePanel";
+import { InitiativeList } from "./InitiativePanel";
 import { GmPanel } from "./GmPanel";
 import { MapView } from "./MapView";
 
@@ -38,6 +40,11 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   // Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa.
   const [tokens, setTokens] = useState<TokenView[]>([]);
   const [characters, setCharacters] = useState<CharacterView[]>([]);
+  const [initiative, setInitiative] = useState<InitiativeView>({
+    round: 0,
+    activeId: null,
+    entries: [],
+  });
   const [rolls, setRolls] = useState<RollResult[]>([]);
   const [fogs, setFogs] = useState<Record<number, FogState>>({});
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
@@ -65,7 +72,9 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
       setFogs(Object.fromEntries(snapshot.fogs.map((f) => [f.sceneId, f])));
       setRolls(snapshot.rolls);
       setCharacters(snapshot.characters);
+      setInitiative(snapshot.initiative);
     });
+    s.on("initiative:set", setInitiative);
     s.on("character:update", (c) => setCharacters((current) => upsertCharacter(current, c)));
     s.on("character:remove", (id) =>
       setCharacters((current) => current.filter((c) => c.id !== id)),
@@ -218,6 +227,8 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         onLeavePreview={() => setPreviewId(null)}
       />
 
+      {!user.isGm && <InitiativeList initiative={initiative} />}
+
       <DicePanel rolls={rolls} isGm={user.isGm} onRoll={rollDice} />
 
       <CharactersPanel
@@ -253,6 +264,8 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           shownScene={shown}
           tokens={shownTokens}
           characters={characters}
+          onCharacterCreated={addCharacter}
+          initiative={initiative}
           fog={shownFog}
           selectedTokenId={selectedTokenId}
           onSelectToken={setSelectedTokenId}

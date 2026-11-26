@@ -36,6 +36,8 @@ import {
   registerCharacterRoutes,
   registerCharacterSocket,
 } from "./characters.js";
+import { Initiative, registerInitiativeRoutes } from "./initiative.js";
+import { Notes, registerNoteRoutes } from "./notes.js";
 import { registerDiceSocket, Rolls } from "./dice.js";
 import { Fog, registerFogRoutes } from "./fog.js";
 import { registerTokenRoutes, registerTokenSocket, TokenHub, Tokens } from "./tokens.js";
@@ -68,7 +70,14 @@ const fail = (res: Response, status: number, error: string): void => {
 export function createApp(config: Config, db: Database.Database): AppContext {
   const app = express();
   if (config.trustProxy) app.set("trust proxy", 1);
-  app.use(express.json({ limit: "10kb" }));
+  // Notas e fichas podem ser grandes; o resto das rotas aceita pouco.
+  const smallJson = express.json({ limit: "10kb" });
+  const bigJson = express.json({ limit: "200kb" });
+  app.use((req, res, next) =>
+    (req.path.startsWith("/api/notes") || req.path.startsWith("/api/characters")
+      ? bigJson
+      : smallJson)(req, res, next),
+  );
 
   const users = new Users(db);
   const presence = new Presence();
@@ -102,6 +111,8 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   const scenes = new Scenes(db, images);
   const fog = new Fog(db);
   const rolls = new Rolls(db);
+  const initiative = new Initiative(db);
+  const notes = new Notes(db);
   const characters = new Characters(db, users);
   const tokens = new Tokens(db, images, scenes, users, fog);
   // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
@@ -250,6 +261,39 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     onChanged: onCharacterChanged,
     tokenIdsOf: (id) => tokens.byCharacter(id).map((t) => t.id),
   });
+  registerNoteRoutes({ app, notes, requireGm });
+  const broadcastInitiative = (): void => {
+    io.to("gm").emit("initiative:set", initiative.view(true));
+    io.to("players").emit("initiative:set", initiative.view(false));
+  };
+  registerInitiativeRoutes({
+    app,
+    initiative,
+    requireGm,
+    tokensById: (ids) =>
+      ids.flatMap((id) => {
+        const token = tokens.byId(id);
+        return token ? [{ id: token.id, name: token.name, hidden: token.hidden }] : [];
+      }),
+    rollFor: (entry) => {
+      const token = entry.tokenId === null ? null : tokens.byId(entry.tokenId);
+      const sheet = token?.characterId == null ? null : characters.byId(token.characterId);
+      const reflex = sheet?.data.stats.REF ?? 0;
+      // A rolagem sai no histórico, no nome do mestre; a de entrada oculta é secreta.
+      const gmUser = users.list().find((u) => u.isGm);
+      if (!gmUser) return null;
+      const reply = rolls.roll(gmUser, {
+        expression: `1d10+${reflex}`,
+        label: `Iniciativa: ${entry.name}`,
+        secret: entry.hidden,
+      });
+      if (!reply.ok) return null;
+      if (reply.roll.secret) io.to("gm").emit("dice:result", reply.roll);
+      else io.emit("dice:result", reply.roll);
+      return reply.roll.total;
+    },
+    onChange: broadcastInitiative,
+  });
   registerFogRoutes({
     app,
     fog,
@@ -295,6 +339,7 @@ export function createApp(config: Config, db: Database.Database): AppContext {
         user.isGm ? fog.all() : activeFog ? [activeFog] : [],
         rolls.recent(user.isGm),
         characters.forUser(user),
+        initiative.view(user.isGm),
       ),
     );
     registerMapSocket(socket, rulers);

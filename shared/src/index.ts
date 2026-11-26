@@ -1,5 +1,6 @@
 import type { FogShape, FogState } from "./fog.js";
 import type { CharacterData, CharacterView } from "./character.js";
+import type { InitiativeView } from "./initiative.js";
 import type { RollReply, RollRequest, RollResult } from "./dice.js";
 import type { TokenMove, TokenView } from "./tokens.js";
 
@@ -110,6 +111,7 @@ export interface StateSnapshot {
   rolls: RollResult[];
   /** Mestre: todas as fichas. Jogador: as próprias. */
   characters: CharacterView[];
+  initiative: InitiativeView;
 }
 
 /** Eventos que o cliente envia ao servidor. */
@@ -155,6 +157,8 @@ export interface ServerToClientEvents {
   /** Ficha nova ou alterada (só para o mestre e o dono). */
   "character:update": (character: CharacterView) => void;
   "character:remove": (id: number) => void;
+  /** Iniciativa inteira (o mestre recebe os valores e as entradas ocultas; jogadores, só a ordem). */
+  "initiative:set": (initiative: InitiativeView) => void;
 }
 
 export type CharacterReply = { ok: true; character: CharacterView } | { ok: false; error: string };
@@ -176,3 +180,6 @@ export * from "./tokens.js";
 export * from "./fog.js";
 export * from "./dice.js";
 export * from "./character.js";
+export * from "./initiative.js";
+export * from "./notes.js";
+export * from "./markdown.js";

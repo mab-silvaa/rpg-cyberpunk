@@ -19,7 +19,9 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 
 - Fase 6: ficha do Cyberpunk RED (STATs, skills, vitais, armadura, armas, cyberware, equipamento, lifepath) com autosave. HP máximo, Humanity máxima e Death Save são calculados; clicar numa skill ou arma rola o teste. Token ligado a uma ficha mostra a barra de HP (jogadores só veem o HP de fichas de personagem, nunca o de NPC)
 
-Painel do mestre (notas, NPCs, iniciativa), backup e teste ponta a ponta chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
+- Fase 7: painel do mestre com notas privadas em Markdown (autosave), NPCs (fichas sem jogador, com atalho para colocar no mapa e duplicar) e iniciativa (tokens da cena, rolagem 1d10 + REF para NPCs, ordem, rodada e vez; os jogadores veem só a ordem)
+
+Backup e teste ponta a ponta chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
 
 ## Desenvolvimento no Linux
 

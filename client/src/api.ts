@@ -1,5 +1,9 @@
 import type {
   ApiError,
+  InitiativeEntryInput,
+  InitiativeView,
+  Note,
+  NoteInput,
   CharacterView,
   FogShapeInput,
   FogState,
@@ -67,11 +71,28 @@ export const api = {
     request<FogState>("POST", `/api/scenes/${sceneId}/fog/cover-all`),
   revealAllFog: (sceneId: number) =>
     request<FogState>("POST", `/api/scenes/${sceneId}/fog/reveal-all`),
-  createCharacter: (body: { ownerId?: number | null }) =>
+  createCharacter: (body: { ownerId?: number | null; data?: unknown }) =>
     request<CharacterView>("POST", "/api/characters", body),
   assignCharacter: (id: number, ownerId: number | null) =>
     request<CharacterView>("PATCH", `/api/characters/${id}`, { ownerId }),
   deleteCharacter: (id: number) => request<void>("DELETE", `/api/characters/${id}`),
+  notes: () => request<Note[]>("GET", "/api/notes"),
+  createNote: (input: NoteInput) => request<Note>("POST", "/api/notes", input),
+  updateNote: (id: number, input: NoteInput) => request<Note>("PATCH", `/api/notes/${id}`, input),
+  deleteNote: (id: number) => request<void>("DELETE", `/api/notes/${id}`),
+  addInitiative: (input: InitiativeEntryInput) =>
+    request<InitiativeView>("POST", "/api/initiative/entries", input),
+  updateInitiative: (id: number, input: InitiativeEntryInput) =>
+    request<InitiativeView>("PATCH", `/api/initiative/entries/${id}`, input),
+  removeInitiative: (id: number) =>
+    request<InitiativeView>("DELETE", `/api/initiative/entries/${id}`),
+  initiativeFromTokens: (tokenIds: number[]) =>
+    request<InitiativeView>("POST", "/api/initiative/from-tokens", { tokenIds }),
+  rollInitiative: () => request<InitiativeView>("POST", "/api/initiative/roll", {}),
+  startInitiative: () => request<InitiativeView>("POST", "/api/initiative/start"),
+  nextInitiative: () => request<InitiativeView>("POST", "/api/initiative/next"),
+  endInitiative: () => request<InitiativeView>("POST", "/api/initiative/end"),
+  clearInitiative: () => request<InitiativeView>("POST", "/api/initiative/clear"),
   uploadImage: (file: File) => {
     const form = new FormData();
     form.append("file", file);

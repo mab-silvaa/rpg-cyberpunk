@@ -487,3 +487,66 @@ button.danger {
   outline-offset: 3px;
   border-radius: 4px;
 }
+
+.markdown {
+  padding: 0.6rem 0.8rem;
+  background: #0f1219;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+.markdown h3,
+.markdown h4,
+.markdown h5 {
+  margin: 0.6rem 0 0.3rem;
+}
+.markdown pre {
+  overflow-x: auto;
+  padding: 0.5rem;
+  background: #0a0c12;
+  border-radius: 4px;
+}
+.markdown blockquote {
+  margin: 0.4rem 0;
+  padding-left: 0.8rem;
+  border-left: 3px solid var(--accent);
+  color: #c4cadb;
+}
+.note-editor {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+.note-editor .row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.note-editor textarea {
+  width: 100%;
+  font-family: inherit;
+}
+.initiative {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.3rem;
+}
+.initiative li.active {
+  color: var(--accent);
+  font-weight: 700;
+}
+.initiative.gm li {
+  display: list-item;
+}
+.initiative.gm li > span:first-child {
+  margin-right: 1rem;
+}
+.initiative .actions {
+  display: inline-flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+.initiative input[type="number"] {
+  width: 4.5rem;
+}
