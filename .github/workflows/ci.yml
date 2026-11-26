@@ -20,3 +20,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t vtt-app .
+      - name: Sobe a imagem e confere o health check
+        run: |
+          docker run -d --name vtt -p 3000:3000 -e GM_PASSWORD=ci vtt-app
+          for i in $(seq 1 20); do
+            curl -fs http://localhost:3000/api/health && exit 0
+            sleep 1
+          done
+          docker logs vtt
+          exit 1

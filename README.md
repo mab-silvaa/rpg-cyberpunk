@@ -6,7 +6,10 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 
 ## Status
 
-Fase 0 (fundação): monorepo, servidor com health check e WebSocket de teste, front React, SQLite com migrações e CI. O jogo em si começa na fase 1.
+- Fase 0: monorepo, servidor com health check, front React, SQLite com migrações e CI
+- Fase 1: entrada por nome, senha do mestre, painel do mestre (link do tunnel, renomear e expulsar jogadores) e Docker com Cloudflare quick tunnel
+
+O mapa, os tokens e o resto do jogo chegam nas próximas fases.
 
 ## Desenvolvimento no Linux
 
@@ -26,6 +29,36 @@ npm start
 
 Os dados de desenvolvimento ficam em `data-dev/` (fora do git). Use `DATA_DIR` para trocar a pasta e `PORT` para trocar a porta do servidor.
 
+## Jogar com Docker (jogadores entram pelo link)
+
+Pré-requisitos: Docker Engine com o plugin `docker compose` e seu usuário no grupo `docker` (`sudo usermod -aG docker $USER`, depois saia e entre na sessão).
+
+```bash
+npm run setup            # cria data/ e o .env (pergunta a senha do mestre; Enter gera uma)
+docker compose up -d --build
+```
+
+1. Abra <http://localhost:3000>, marque "Sou o mestre" e entre com a senha.
+2. No painel do mestre, clique em **Copiar link** e cole no Discord. Os jogadores abrem o link, digitam o nome e entram.
+3. Para parar: `docker compose down`. Os dados continuam em `data/`.
+
+O tunnel usado é o **quick tunnel** da Cloudflare: não precisa de conta nem de domínio, mas o link muda toda vez que o container do tunnel reinicia (e com `docker compose down` e `up`). Cole o link novo no Discord a cada sessão. Se o painel não mostrar o link, `docker compose logs tunnel` também o imprime.
+
+O container roda com o seu usuário (`HOST_UID` e `HOST_GID` no `.env`, preenchidos pelo `npm run setup`), então os arquivos em `data/` ficam seus. Se o `npm run setup` não foi rodado, o Docker cria `data/` como root e o app não consegue gravar.
+
+## Variáveis de ambiente
+
+| Variável             | Para quê                                                                  |
+| -------------------- | ------------------------------------------------------------------------- |
+| `GM_PASSWORD`        | Senha para entrar como mestre. Sem ela, o login de mestre fica desativado |
+| `SESSION_SECRET`     | Assina os cookies de sessão. Se faltar, o app gera um e guarda em `data/` |
+| `DATA_DIR`           | Pasta do banco e dos uploads (`data-dev/` em desenvolvimento)             |
+| `PORT`               | Porta do servidor (3000)                                                  |
+| `TRUST_PROXY`        | `1` atrás do tunnel, para enxergar o IP real; o compose já define         |
+| `TUNNEL_METRICS_URL` | Onde ler o link do quick tunnel; o compose já define                      |
+
+Em desenvolvimento (`npm start`), o servidor também lê o `.env` da raiz. Sem `GM_PASSWORD` você entra como jogador, mas não como mestre.
+
 ## Scripts
 
 | Comando              | O que faz                                             |
@@ -34,6 +67,7 @@ Os dados de desenvolvimento ficam em `data-dev/` (fora do git). Use `DATA_DIR` p
 | `npm run build`      | Compila `shared`, `server` e `client`                 |
 | `npm run start:prod` | Roda o servidor compilado, que também entrega o front |
 | `npm test`           | Testes do servidor (Vitest)                           |
+| `npm run setup`      | Cria `data/` e o `.env` para rodar com Docker         |
 | `npm run lint`       | ESLint                                                |
 | `npm run typecheck`  | Verificação de tipos nos três pacotes                 |
 | `npm run format`     | Prettier (`format:check` só confere)                  |

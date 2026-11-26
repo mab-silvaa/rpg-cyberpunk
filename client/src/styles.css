@@ -45,3 +45,141 @@ h1 {
   margin: 0;
   opacity: 0.7;
 }
+
+.card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: #131724;
+  border: 1px solid #262b3d;
+  border-radius: 8px;
+  text-align: left;
+  min-width: min(22rem, 90vw);
+}
+.card h2,
+.card h3 {
+  margin: 0;
+}
+.card h3 {
+  font-size: 0.95rem;
+  opacity: 0.8;
+  margin-top: 0.5rem;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+input:not([type="checkbox"]) {
+  padding: 0.5rem 0.6rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid #3a4160;
+  border-radius: 6px;
+  font: inherit;
+}
+
+button {
+  padding: 0.5rem 0.9rem;
+  background: var(--accent);
+  color: #111;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+button.link {
+  padding: 0;
+  background: none;
+  color: var(--fg);
+  text-decoration: underline;
+  font-weight: 400;
+}
+button.danger {
+  color: var(--bad);
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 0.9rem;
+}
+
+.home {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+.home header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.who {
+  display: flex;
+  gap: 0.9rem;
+  align-items: center;
+}
+.who .status {
+  font-size: 0.75rem;
+}
+
+.players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.players li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+.players li::before {
+  content: "●";
+  margin-right: 0.5rem;
+}
+.players li {
+  justify-content: flex-start;
+}
+.players .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.75rem;
+}
+.players .online::before {
+  color: var(--ok);
+}
+.players .offline {
+  opacity: 0.55;
+}
+.players .offline::before {
+  color: #667;
+}
+
+.link-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.link-row code {
+  word-break: break-all;
+}
