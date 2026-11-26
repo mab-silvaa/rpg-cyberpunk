@@ -1,4 +1,4 @@
-export const APP_NAME = "VTT Cyberpunk";
+export const APP_NAME = "Salandra Cyberpunk";
 
 export interface User {
   id: number;
