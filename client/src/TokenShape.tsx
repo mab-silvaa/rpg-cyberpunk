@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type Konva from "konva";
-import { Circle, Group, Image as KonvaImage, Text } from "react-konva";
+import { Circle, Group, Image as KonvaImage, Rect, Text } from "react-konva";
 import {
   initials,
   snapToGrid,
@@ -120,6 +120,9 @@ export function TokenShape({
         strokeScaleEnabled={false}
         dash={token.hidden ? [8, 6] : undefined}
       />
+      {token.hp && token.hp.max > 0 && (
+        <HpBar hp={token.hp} width={Math.max(2 * r, 40 / scale)} y={-r - 9 / scale} scale={scale} />
+      )}
       <Text
         text={token.name}
         width={200}
@@ -135,6 +138,29 @@ export function TokenShape({
         shadowOpacity={1}
         listening={false}
       />
+    </Group>
+  );
+}
+
+/** Barra de HP acima do token: verde, amarela abaixo da metade, vermelha com HP zero. */
+function HpBar({
+  hp,
+  width,
+  y,
+  scale,
+}: {
+  hp: { current: number; max: number };
+  width: number;
+  y: number;
+  scale: number;
+}) {
+  const ratio = Math.min(1, Math.max(0, hp.current / hp.max));
+  const color = hp.current <= 0 ? "#ff5c7a" : ratio <= 0.5 ? "#f5c542" : "#37d67a";
+  const height = 6 / scale;
+  return (
+    <Group listening={false} x={-width / 2} y={y}>
+      <Rect width={width} height={height} fill="#0b0d14" stroke="#000" strokeWidth={1 / scale} />
+      <Rect width={width * ratio} height={height} fill={color} />
     </Group>
   );
 }

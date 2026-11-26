@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  CharacterView,
   FogShapeInput,
   FogState,
   ImageInfo,
@@ -66,6 +67,11 @@ export const api = {
     request<FogState>("POST", `/api/scenes/${sceneId}/fog/cover-all`),
   revealAllFog: (sceneId: number) =>
     request<FogState>("POST", `/api/scenes/${sceneId}/fog/reveal-all`),
+  createCharacter: (body: { ownerId?: number | null }) =>
+    request<CharacterView>("POST", "/api/characters", body),
+  assignCharacter: (id: number, ownerId: number | null) =>
+    request<CharacterView>("PATCH", `/api/characters/${id}`, { ownerId }),
+  deleteCharacter: (id: number) => request<void>("DELETE", `/api/characters/${id}`),
   uploadImage: (file: File) => {
     const form = new FormData();
     form.append("file", file);

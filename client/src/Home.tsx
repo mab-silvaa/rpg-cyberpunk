@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   APP_NAME,
+  type CharacterData,
+  type CharacterReply,
+  type CharacterView,
   type ClientToServerEvents,
   type FogState,
   type PresenceUser,
@@ -18,6 +21,7 @@ import {
   type User,
 } from "@vtt/shared";
 import { api } from "./api";
+import { CharactersPanel } from "./CharactersPanel";
 import { DicePanel } from "./DicePanel";
 import { GmPanel } from "./GmPanel";
 import { MapView } from "./MapView";
@@ -33,6 +37,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [rulers, setRulers] = useState<RulerState[]>([]);
   // Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa.
   const [tokens, setTokens] = useState<TokenView[]>([]);
+  const [characters, setCharacters] = useState<CharacterView[]>([]);
   const [rolls, setRolls] = useState<RollResult[]>([]);
   const [fogs, setFogs] = useState<Record<number, FogState>>({});
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
@@ -59,7 +64,12 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
       setTokens(snapshot.tokens);
       setFogs(Object.fromEntries(snapshot.fogs.map((f) => [f.sceneId, f])));
       setRolls(snapshot.rolls);
+      setCharacters(snapshot.characters);
     });
+    s.on("character:update", (c) => setCharacters((current) => upsertCharacter(current, c)));
+    s.on("character:remove", (id) =>
+      setCharacters((current) => current.filter((c) => c.id !== id)),
+    );
     s.on("dice:result", (roll) => setRolls((current) => addRoll(current, roll)));
     s.on("fog:set", (fog) => setFogs((current) => ({ ...current, [fog.sceneId]: fog })));
     s.on("fog:add", (sceneId, shape) =>
@@ -122,6 +132,28 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           resolve(reply);
         });
       }),
+    [],
+  );
+  const saveCharacter = useCallback(
+    (id: number, patch: Partial<CharacterData>) =>
+      new Promise<CharacterReply>((resolve) => {
+        const socket = socketRef.current;
+        if (!socket?.connected) {
+          return resolve({ ok: false, error: "Sem conexão com a mesa. Vou tentar de novo" });
+        }
+        socket.emit("character:patch", id, patch, (reply) => {
+          if (reply.ok) setCharacters((current) => upsertCharacter(current, reply.character));
+          resolve(reply);
+        });
+      }),
+    [],
+  );
+  const addCharacter = useCallback(
+    (c: CharacterView) => setCharacters((current) => upsertCharacter(current, c)),
+    [],
+  );
+  const removeCharacter = useCallback(
+    (id: number) => setCharacters((current) => current.filter((c) => c.id !== id)),
     [],
   );
   const changeToken = useCallback(
@@ -188,6 +220,16 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
 
       <DicePanel rolls={rolls} isGm={user.isGm} onRoll={rollDice} />
 
+      <CharactersPanel
+        user={user}
+        characters={characters}
+        players={players}
+        onSave={saveCharacter}
+        onRoll={rollDice}
+        onCreated={addCharacter}
+        onRemoved={removeCharacter}
+      />
+
       <section className="card">
         <h2>Na mesa</h2>
         <ul className="players">
@@ -210,6 +252,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           onPreview={setPreviewId}
           shownScene={shown}
           tokens={shownTokens}
+          characters={characters}
           fog={shownFog}
           selectedTokenId={selectedTokenId}
           onSelectToken={setSelectedTokenId}
@@ -223,6 +266,10 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
 
 const noRuler = (): void => undefined;
 const noSelect = (): void => undefined;
+
+function upsertCharacter(list: CharacterView[], c: CharacterView): CharacterView[] {
+  return list.some((x) => x.id === c.id) ? list.map((x) => (x.id === c.id ? c : x)) : [...list, c];
+}
 
 /** Acrescenta a rolagem ao histórico (sem repetir) e mantém só as últimas 100. */
 function addRoll(list: RollResult[], roll: RollResult): RollResult[] {

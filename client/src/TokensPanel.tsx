@@ -4,6 +4,7 @@ import {
   TOKEN_NAME_MAX_LENGTH,
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
+  type CharacterView,
   type PresenceUser,
   type SceneView,
   type TokenInput,
@@ -15,6 +16,7 @@ interface Props {
   scene: SceneView | null;
   tokens: TokenView[];
   players: PresenceUser[];
+  characters: CharacterView[];
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onChange: (token: TokenView) => void;
@@ -26,6 +28,7 @@ interface FormValues {
   size: number;
   color: string;
   ownerId: number | null;
+  characterId: number | null;
   hidden: boolean;
   file: File | null;
   removeImage: boolean;
@@ -34,12 +37,14 @@ interface FormValues {
 function TokenForm({
   initial,
   players,
+  characters,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial?: TokenView;
   players: PresenceUser[];
+  characters: CharacterView[];
   submitLabel: string;
   onSubmit: (values: FormValues) => Promise<void>;
   onCancel?: () => void;
@@ -48,6 +53,7 @@ function TokenForm({
   const [size, setSize] = useState(initial?.size ?? 1);
   const [color, setColor] = useState(initial?.color ?? TOKEN_DEFAULT_COLOR);
   const [ownerId, setOwnerId] = useState<number | null>(initial?.ownerId ?? null);
+  const [characterId, setCharacterId] = useState<number | null>(initial?.characterId ?? null);
   const [hidden, setHidden] = useState(initial?.hidden ?? false);
   const [file, setFile] = useState<File | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
@@ -59,7 +65,7 @@ function TokenForm({
     setBusy(true);
     setError(undefined);
     try {
-      await onSubmit({ name, size, color, ownerId, hidden, file, removeImage });
+      await onSubmit({ name, size, color, ownerId, characterId, hidden, file, removeImage });
       if (!initial) {
         setName("");
         setFile(null);
@@ -118,6 +124,21 @@ function TokenForm({
         </select>
       </label>
       <label>
+        Ficha ligada (mostra a barra de HP no token)
+        <select
+          value={characterId ?? ""}
+          onChange={(e) => setCharacterId(e.target.value === "" ? null : Number(e.target.value))}
+        >
+          <option value="">Nenhuma</option>
+          {characters.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.data.handle || "Sem nome"}
+              {c.ownerId === null ? " (NPC)" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
         {initial?.imageUrl ? "Trocar a imagem" : "Imagem (opcional)"} (PNG, JPG ou WebP)
         <input
           type="file"
@@ -162,6 +183,7 @@ export function TokensPanel({
   scene,
   tokens,
   players,
+  characters,
   selectedId,
   onSelect,
   onChange,
@@ -181,6 +203,7 @@ export function TokensPanel({
       size: values.size,
       color: values.color,
       ownerId: values.ownerId,
+      characterId: values.characterId,
       hidden: values.hidden,
       ...(imageId !== undefined ? { imageId } : {}),
     };
@@ -245,6 +268,7 @@ export function TokensPanel({
               <TokenForm
                 initial={token}
                 players={players}
+                characters={characters}
                 submitLabel="Salvar"
                 onSubmit={(values) => save(token.id, values)}
                 onCancel={() => setEditingId(null)}
@@ -262,7 +286,12 @@ export function TokensPanel({
         <details className="new-scene">
           <summary>Novo token</summary>
           <p className="details">O token aparece no centro do mapa; arraste para o lugar certo.</p>
-          <TokenForm players={players} submitLabel="Criar token" onSubmit={(v) => save(null, v)} />
+          <TokenForm
+            players={players}
+            characters={characters}
+            submitLabel="Criar token"
+            onSubmit={(v) => save(null, v)}
+          />
         </details>
       )}
     </>

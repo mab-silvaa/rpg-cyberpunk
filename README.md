@@ -17,7 +17,9 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 
 - Fase 5: dados no servidor (`crypto.randomInt`) com histórico guardado. Escreva rolagens como `2d6+3` ou `1d10!+8` (o `!` pede o teste do RED: 10 natural soma outro d10, 1 natural subtrai outro d10); dano em d6 marca crítico com dois ou mais 6. O mestre pode rolar em segredo
 
-Fichas, painel do mestre, backup e teste ponta a ponta chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
+- Fase 6: ficha do Cyberpunk RED (STATs, skills, vitais, armadura, armas, cyberware, equipamento, lifepath) com autosave. HP máximo, Humanity máxima e Death Save são calculados; clicar numa skill ou arma rola o teste. Token ligado a uma ficha mostra a barra de HP (jogadores só veem o HP de fichas de personagem, nunca o de NPC)
+
+Painel do mestre (notas, NPCs, iniciativa), backup e teste ponta a ponta chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
 
 ## Desenvolvimento no Linux
 

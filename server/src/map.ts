@@ -8,6 +8,7 @@ import type {
   RulerState,
   SceneSummary,
   SceneView,
+  CharacterView,
   FogState,
   RollResult,
   StateSnapshot,
@@ -133,6 +134,7 @@ export function snapshotFor(
   tokens: TokenView[],
   fogs: FogState[],
   rolls: RollResult[],
+  characters: CharacterView[],
 ): StateSnapshot {
   return {
     scene: scene ? toView(scene) : null,
@@ -140,6 +142,7 @@ export function snapshotFor(
     tokens,
     fogs,
     rolls,
+    characters,
   };
 }
 

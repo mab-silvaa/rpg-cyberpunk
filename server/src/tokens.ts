@@ -6,7 +6,9 @@ import {
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
   isFogged,
+  maxHp,
   type ApiError,
+  type CharacterData,
   type TokenInput,
   type TokenMove,
   type TokenView,
@@ -29,13 +31,17 @@ interface TokenRow {
   image_id: number | null;
   owner_id: number | null;
   hidden: number;
+  character_id: number | null;
   filename: string | null;
+  char_data: string | null;
 }
 
 const SELECT = `
   SELECT t.id, t.scene_id, t.name, t.x, t.y, t.size, t.color, t.image_id, t.owner_id, t.hidden,
-         i.filename
-  FROM tokens t LEFT JOIN images i ON i.id = t.image_id`;
+         t.character_id, i.filename, c.data AS char_data
+  FROM tokens t
+  LEFT JOIN images i ON i.id = t.image_id
+  LEFT JOIN characters c ON c.id = t.character_id`;
 
 const toView = (row: TokenRow): TokenView => ({
   id: row.id,
@@ -48,6 +54,13 @@ const toView = (row: TokenRow): TokenView => ({
   imageUrl: row.filename ? imageUrl(row.filename) : null,
   ownerId: row.owner_id,
   hidden: row.hidden === 1,
+  characterId: row.character_id,
+  hp: row.char_data ? hpOf(JSON.parse(row.char_data) as CharacterData) : null,
+});
+
+const hpOf = (data: CharacterData): { current: number; max: number } => ({
+  current: data.hpCurrent,
+  max: maxHp(data),
 });
 
 const COORD_LIMIT = 1e6;
@@ -101,11 +114,19 @@ export function parseTokenInput(body: unknown, creating: boolean): ParseResult {
     }
     value.color = raw.color.toLowerCase();
   }
-  for (const key of ["imageId", "ownerId"] as const) {
+  for (const key of ["imageId", "ownerId", "characterId"] as const) {
     const v = raw[key];
     if (v === undefined) continue;
     if (v !== null && (typeof v !== "number" || !Number.isInteger(v))) {
-      return { ok: false, error: key === "imageId" ? "Imagem inválida" : "Dono inválido" };
+      return {
+        ok: false,
+        error:
+          key === "imageId"
+            ? "Imagem inválida"
+            : key === "ownerId"
+              ? "Dono inválido"
+              : "Ficha inválida",
+      };
     }
     value[key] = v;
   }
@@ -117,7 +138,7 @@ export function parseTokenInput(body: unknown, creating: boolean): ParseResult {
   return { ok: true, value };
 }
 
-export type TokenError = "scene" | "image" | "owner";
+export type TokenError = "scene" | "image" | "owner" | "character";
 
 export class Tokens {
   constructor(
@@ -158,12 +179,34 @@ export class Tokens {
 
   /** Tokens que este usuário recebe. */
   visibleTo(user: User): TokenView[] {
-    return this.list().filter((token) => this.canSee(user, token));
+    return this.list()
+      .filter((token) => this.canSee(user, token))
+      .map((token) => this.forUser(user, token));
+  }
+
+  /** O que este usuário pode ver do token: jogador não recebe o HP de fichas sem dono (NPCs). */
+  forUser(user: User, token: TokenView): TokenView {
+    if (user.isGm || !token.hp || token.characterId === null) return token;
+    const owner = this.db
+      .prepare("SELECT owner_id FROM characters WHERE id = ?")
+      .get(token.characterId) as { owner_id: number | null } | undefined;
+    return owner?.owner_id == null ? { ...token, hp: null } : token;
+  }
+
+  byCharacter(characterId: number): TokenView[] {
+    const rows = this.db.prepare(`${SELECT} WHERE t.character_id = ?`).all(characterId);
+    return (rows as TokenRow[]).map(toView);
   }
 
   private check(input: TokenInput): TokenError | null {
     if (input.imageId != null && !this.images.byId(input.imageId)) return "image";
     if (input.ownerId != null && !this.users.byId(input.ownerId)) return "owner";
+    if (
+      input.characterId != null &&
+      !this.db.prepare("SELECT 1 FROM characters WHERE id = ?").get(input.characterId)
+    ) {
+      return "character";
+    }
     return null;
   }
 
@@ -176,8 +219,8 @@ export class Tokens {
     const y = input.y ?? (scene.imageHeight ?? 1400) / 2;
     const result = this.db
       .prepare(
-        `INSERT INTO tokens (scene_id, name, x, y, size, color, image_id, owner_id, hidden)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tokens (scene_id, name, x, y, size, color, image_id, owner_id, hidden, character_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         scene.id,
@@ -189,6 +232,7 @@ export class Tokens {
         input.imageId ?? null,
         input.ownerId ?? null,
         input.hidden ? 1 : 0,
+        input.characterId ?? null,
       );
     return this.byId(Number(result.lastInsertRowid))!;
   }
@@ -204,8 +248,8 @@ export class Tokens {
     const previousImage = this.imageIdOf(id);
     this.db
       .prepare(
-        `UPDATE tokens SET name = ?, x = ?, y = ?, size = ?, color = ?, image_id = ?, owner_id = ?, hidden = ?
-         WHERE id = ?`,
+        `UPDATE tokens SET name = ?, x = ?, y = ?, size = ?, color = ?, image_id = ?, owner_id = ?, hidden = ?,
+         character_id = ? WHERE id = ?`,
       )
       .run(
         input.name ?? current.name,
@@ -216,6 +260,7 @@ export class Tokens {
         input.imageId === undefined ? previousImage : input.imageId,
         input.ownerId === undefined ? current.ownerId : input.ownerId,
         (input.hidden ?? current.hidden) ? 1 : 0,
+        input.characterId === undefined ? current.characterId : input.characterId,
         id,
       );
     if (input.imageId !== undefined && input.imageId !== previousImage) {
@@ -335,7 +380,7 @@ export class TokenHub {
     if (visible) {
       seen.add(token.id);
       if (kind === "move" && has) socket.emit("token:move", token.id, token.x, token.y);
-      else socket.emit("token:upsert", token);
+      else socket.emit("token:upsert", this.tokens.forUser(socket.data.user, token));
     } else if (has) {
       seen.delete(token.id);
       socket.emit("token:remove", token.id);
@@ -378,6 +423,7 @@ const fail = (res: Response, status: number, error: string): void => {
 };
 
 const ERRORS: Record<TokenError, string> = {
+  character: "Essa ficha não existe mais",
   scene: "Cena não encontrada",
   image: "Essa imagem não existe mais. Envie de novo",
   owner: "Esse jogador não existe mais",
@@ -429,7 +475,8 @@ export function registerTokenSocket(socket: VttSocket, tokens: Tokens, hub: Toke
   /** Devolve a quem tentou o estado verdadeiro do token (ou o some, se não pode vê-lo). */
   const correct = (id: number): void => {
     const token = tokens.byId(id);
-    if (token && tokens.canSee(user, token)) socket.emit("token:upsert", token);
+    if (token && tokens.canSee(user, token))
+      socket.emit("token:upsert", tokens.forUser(user, token));
     else socket.emit("token:remove", id);
   };
 

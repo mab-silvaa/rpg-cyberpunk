@@ -415,3 +415,75 @@ button.danger {
 .badge.crit {
   background: #ff5c7a;
 }
+
+.sheet {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+.sheet h4 {
+  margin: 0.6rem 0 0;
+  color: var(--accent);
+}
+.sheet .row,
+.sheet .item .row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.sheet label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.6rem;
+}
+.num input {
+  width: 100%;
+}
+.sheet .item {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem;
+  border: 1px solid #262b3d;
+  border-radius: 6px;
+}
+.skills {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.skills th {
+  text-align: left;
+  color: var(--muted, #98a2b8);
+  font-weight: 500;
+}
+.skills td {
+  padding: 0.15rem 0.3rem 0.15rem 0;
+}
+.skills input[type="number"] {
+  width: 4rem;
+}
+.skills td.actions {
+  display: flex;
+  gap: 0.4rem;
+}
+.save-state {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+.save-salvo {
+  color: var(--ok);
+}
+.save-erro {
+  color: #ff5c7a;
+}
+.characters li.selected > .scene-line {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}

@@ -1,4 +1,5 @@
 import type { FogShape, FogState } from "./fog.js";
+import type { CharacterData, CharacterView } from "./character.js";
 import type { RollReply, RollRequest, RollResult } from "./dice.js";
 import type { TokenMove, TokenView } from "./tokens.js";
 
@@ -107,6 +108,8 @@ export interface StateSnapshot {
   fogs: FogState[];
   /** Histórico recente de rolagens; as secretas só vêm para o mestre. */
   rolls: RollResult[];
+  /** Mestre: todas as fichas. Jogador: as próprias. */
+  characters: CharacterView[];
 }
 
 /** Eventos que o cliente envia ao servidor. */
@@ -118,6 +121,12 @@ export interface ClientToServerEvents {
   "token:move": (move: TokenMove) => void;
   /** Rola dados no servidor; a resposta traz o resultado ou o erro. */
   "dice:roll": (request: RollRequest, ack: (reply: RollReply) => void) => void;
+  /** Salva campos da ficha (autosave). O dono ou o mestre; a resposta traz a ficha como ficou. */
+  "character:patch": (
+    id: number,
+    patch: Partial<CharacterData>,
+    ack: (reply: CharacterReply) => void,
+  ) => void;
 }
 
 /** Eventos que o servidor envia ao cliente. */
@@ -143,7 +152,12 @@ export interface ServerToClientEvents {
   "fog:add": (sceneId: number, shape: FogShape) => void;
   /** Rolagem nova (as secretas só chegam ao mestre). */
   "dice:result": (roll: RollResult) => void;
+  /** Ficha nova ou alterada (só para o mestre e o dono). */
+  "character:update": (character: CharacterView) => void;
+  "character:remove": (id: number) => void;
 }
+
+export type CharacterReply = { ok: true; character: CharacterView } | { ok: false; error: string };
 
 export interface SocketData {
   user: User;
@@ -161,3 +175,4 @@ export * from "./measure.js";
 export * from "./tokens.js";
 export * from "./fog.js";
 export * from "./dice.js";
+export * from "./character.js";

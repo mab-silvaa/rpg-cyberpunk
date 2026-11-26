@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type {
+  CharacterView,
   FogState,
   PresenceUser,
   SceneSummary,
@@ -23,6 +24,7 @@ interface Props {
   shownScene: SceneView | null;
   tokens: TokenView[];
   fog: FogState | null;
+  characters: CharacterView[];
   selectedTokenId: number | null;
   onSelectToken: (id: number | null) => void;
   onTokenChange: (token: TokenView) => void;
@@ -39,6 +41,7 @@ export function GmPanel({
   shownScene,
   tokens,
   fog,
+  characters,
   selectedTokenId,
   onSelectToken,
   onTokenChange,
@@ -114,6 +117,7 @@ export function GmPanel({
         scene={shownScene}
         tokens={tokens}
         players={players}
+        characters={characters}
         selectedId={selectedTokenId}
         onSelect={onSelectToken}
         onChange={onTokenChange}

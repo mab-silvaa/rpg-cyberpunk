@@ -30,6 +30,12 @@ import { normalizeName, Presence, Users } from "./users.js";
 import { Images } from "./images.js";
 import { registerMapRoutes, registerMapSocket, snapshotFor } from "./map.js";
 import { Scenes } from "./scenes.js";
+import {
+  CharacterHub,
+  Characters,
+  registerCharacterRoutes,
+  registerCharacterSocket,
+} from "./characters.js";
 import { registerDiceSocket, Rolls } from "./dice.js";
 import { Fog, registerFogRoutes } from "./fog.js";
 import { registerTokenRoutes, registerTokenSocket, TokenHub, Tokens } from "./tokens.js";
@@ -96,6 +102,7 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   const scenes = new Scenes(db, images);
   const fog = new Fog(db);
   const rolls = new Rolls(db);
+  const characters = new Characters(db, users);
   const tokens = new Tokens(db, images, scenes, users, fog);
   // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
   images.sweepOrphans(24 * 60 * 60 * 1000);
@@ -103,6 +110,14 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   const httpServer = http.createServer(app);
   const io: VttServer = new Server(httpServer);
   const tokenHub = new TokenHub(io, tokens);
+  const characterHub = new CharacterHub(io);
+  // Mudou a ficha: os tokens ligados a ela mostram o HP novo.
+  const onCharacterChanged = (id: number, tokenIds?: number[]): void => {
+    for (const tokenId of tokenIds ?? tokens.byCharacter(id).map((t) => t.id)) {
+      const token = tokens.byId(tokenId);
+      if (token) tokenHub.upsert(token);
+    }
+  };
   const broadcastPresence = (): void => {
     io.emit("presence:update", presenceList());
   };
@@ -189,11 +204,16 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     if (id === (res.locals.user as User).id)
       return fail(res, 400, "Você não pode expulsar a si mesmo");
     if (!users.byId(id)) return fail(res, 404, "Usuário não encontrado");
+    const orphaned = characters.ownedBy(id).map((c) => c.id);
     users.delete(id);
     io.in(`user:${id}`).disconnectSockets(true);
     res.status(204).end();
     broadcastPresence();
-    // Os tokens dele(a) ficam sem dono; o mestre precisa ver isso.
+    // Os tokens e as fichas dele(a) ficam sem dono; o mestre precisa ver isso.
+    for (const characterId of orphaned) {
+      const c = characters.byId(characterId);
+      if (c) characterHub.update(c);
+    }
     tokenHub.resync();
   });
 
@@ -221,6 +241,15 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     },
   });
   registerTokenRoutes({ app, tokens, hub: tokenHub, requireGm });
+  registerCharacterRoutes({
+    app,
+    characters,
+    hub: characterHub,
+    requireUser,
+    requireGm,
+    onChanged: onCharacterChanged,
+    tokenIdsOf: (id) => tokens.byCharacter(id).map((t) => t.id),
+  });
   registerFogRoutes({
     app,
     fog,
@@ -265,11 +294,13 @@ export function createApp(config: Config, db: Database.Database): AppContext {
         tokenHub.attach(socket),
         user.isGm ? fog.all() : activeFog ? [activeFog] : [],
         rolls.recent(user.isGm),
+        characters.forUser(user),
       ),
     );
     registerMapSocket(socket, rulers);
     registerTokenSocket(socket, tokens, tokenHub);
     registerDiceSocket(socket, io, rolls);
+    registerCharacterSocket(socket, characters, characterHub, onCharacterChanged);
     broadcastPresence();
 
     socket.on("echo:ping", (message, ack) => {
