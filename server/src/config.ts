@@ -11,6 +11,8 @@ export interface Config {
   /** Senha para entrar como mestre. Vazia desativa o login de mestre. */
   gmPassword: string;
   sessionSecret: string;
+  /** Tamanho máximo de cada imagem enviada, em MB. */
+  maxUploadMb: number;
   /** Confia no cabeçalho X-Forwarded-* (atrás do tunnel). */
   trustProxy: boolean;
   /** Endereço do /quicktunnel do cloudflared, para descobrir o link público. */
@@ -61,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     version: rootPkg.version,
     gmPassword: env.GM_PASSWORD ?? "",
     sessionSecret: resolveSessionSecret(env, dataDir),
+    maxUploadMb: Number(env.MAX_UPLOAD_MB) > 0 ? Number(env.MAX_UPLOAD_MB) : 15,
     trustProxy: env.TRUST_PROXY === "1",
     tunnelMetricsUrl: env.TUNNEL_METRICS_URL || undefined,
   };

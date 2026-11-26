@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
-import type { PresenceUser, TunnelInfo, User } from "@vtt/shared";
+import type { PresenceUser, SceneSummary, TunnelInfo, User } from "@vtt/shared";
 import { api } from "./api";
+import { ScenesPanel } from "./ScenesPanel";
 
-export function GmPanel({ self, players }: { self: User; players: PresenceUser[] }) {
+interface Props {
+  self: User;
+  players: PresenceUser[];
+  scenes: SceneSummary[];
+  onScenes: (scenes: SceneSummary[]) => void;
+  previewId: number | null;
+  onPreview: (id: number | null) => void;
+}
+
+export function GmPanel({ self, players, scenes, onScenes, previewId, onPreview }: Props) {
   const [tunnel, setTunnel] = useState<TunnelInfo>();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string>();
@@ -59,6 +69,13 @@ export function GmPanel({ self, players }: { self: User; players: PresenceUser[]
       <p className="details">
         O link muda toda vez que o tunnel reinicia. Cole o link novo no Discord a cada sessão.
       </p>
+
+      <ScenesPanel
+        scenes={scenes}
+        onScenes={onScenes}
+        previewId={previewId}
+        onPreview={onPreview}
+      />
 
       <h3>Jogadores</h3>
       <ul className="players">
