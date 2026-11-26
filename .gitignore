@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Dados da campanha e segredos: nunca vão para o git
+data/
+data-dev/
+backups/
+.env
+*.db
+*.db-shm
+*.db-wal
