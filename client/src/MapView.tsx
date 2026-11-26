@@ -19,7 +19,10 @@ import {
   type RulerLine,
   type RulerState,
   type SceneView,
+  type TokenMove,
+  type TokenView,
 } from "@vtt/shared";
+import { TokenShape } from "./TokenShape";
 import { useImage } from "./useImage";
 import { fitView, zoomAt, type View } from "./view";
 
@@ -34,6 +37,12 @@ interface Props {
   preview: boolean;
   rulers: RulerState[];
   isGm: boolean;
+  selfId: number;
+  /** Tokens da cena mostrada (já filtrados pelo que este usuário pode ver). */
+  tokens: TokenView[];
+  selectedTokenId: number | null;
+  onSelectToken: (id: number | null) => void;
+  onMoveToken: (move: TokenMove) => void;
   onRuler: (line: RulerLine | null) => void;
   onLeavePreview: () => void;
 }
@@ -82,7 +91,19 @@ function RulerShape({
   );
 }
 
-export function MapView({ scene, preview, rulers, isGm, onRuler, onLeavePreview }: Props) {
+export function MapView({
+  scene,
+  preview,
+  rulers,
+  isGm,
+  selfId,
+  tokens,
+  selectedTokenId,
+  onSelectToken,
+  onMoveToken,
+  onRuler,
+  onLeavePreview,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
@@ -209,6 +230,9 @@ export function MapView({ scene, preview, rulers, isGm, onRuler, onLeavePreview 
             const p = stage.getPointerPosition();
             if (p) setView((v) => zoomAt(v, p, e.evt.deltaY < 0 ? 1 : -1));
           }}
+          onClick={(e) => {
+            if (!e.target.findAncestor(".token", true)) onSelectToken(null);
+          }}
           onMouseDown={startRuler}
           onTouchStart={startRuler}
           onMouseMove={moveRuler}
@@ -231,6 +255,22 @@ export function MapView({ scene, preview, rulers, isGm, onRuler, onLeavePreview 
                 listening={false}
               />
             )}
+            {[...tokens]
+              .sort((a, b) => b.size - a.size || a.id - b.id)
+              .map((token) => (
+                <TokenShape
+                  key={token.id}
+                  token={token}
+                  gridPx={scene.gridPx}
+                  map={map}
+                  scale={view.scale}
+                  draggable={tool === "mover" && (isGm || token.ownerId === selfId)}
+                  mine={token.ownerId === selfId}
+                  selected={selectedTokenId === token.id}
+                  onSelect={() => onSelectToken(token.id)}
+                  onMove={onMoveToken}
+                />
+              ))}
             {rulers.map((r) => (
               <RulerShape
                 key={r.userId}

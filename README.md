@@ -11,7 +11,9 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 
 - Fase 2: cenas com imagem de fundo enviada pelo mestre, grid configurável, zoom, pan, régua (os outros veem a régua em tempo real) e prévia de cenas no painel do mestre
 
-Tokens, fog of war, dados e fichas chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
+- Fase 3: tokens (nome, tamanho, cor, imagem opcional, dono, oculto) que o mestre cria no painel; quem é dono move o próprio token, com encaixe no grid (segure Shift para soltar livre) e os outros veem em tempo real
+
+Fog of war, dados e fichas chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
 
 ## Desenvolvimento no Linux
 

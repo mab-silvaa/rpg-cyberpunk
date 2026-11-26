@@ -30,6 +30,7 @@ import { normalizeName, Presence, Users } from "./users.js";
 import { Images } from "./images.js";
 import { registerMapRoutes, registerMapSocket, snapshotFor } from "./map.js";
 import { Scenes } from "./scenes.js";
+import { registerTokenRoutes, registerTokenSocket, TokenHub, Tokens } from "./tokens.js";
 
 export type VttServer = Server<
   ClientToServerEvents,
@@ -91,11 +92,13 @@ export function createApp(config: Config, db: Database.Database): AppContext {
 
   const images = new Images(db, path.join(config.dataDir, "uploads"));
   const scenes = new Scenes(db, images);
+  const tokens = new Tokens(db, images, scenes, users);
   // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
   images.sweepOrphans(24 * 60 * 60 * 1000);
 
   const httpServer = http.createServer(app);
   const io: VttServer = new Server(httpServer);
+  const tokenHub = new TokenHub(io, tokens);
   const broadcastPresence = (): void => {
     io.emit("presence:update", presenceList());
   };
@@ -186,6 +189,8 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     io.in(`user:${id}`).disconnectSockets(true);
     res.status(204).end();
     broadcastPresence();
+    // Os tokens dele(a) ficam sem dono; o mestre precisa ver isso.
+    tokenHub.resync();
   });
 
   app.get("/api/tunnel", requireGm, async (_req, res) => {
@@ -204,8 +209,10 @@ export function createApp(config: Config, db: Database.Database): AppContext {
       // Ao trocar de cena, as réguas da cena antiga somem.
       clearRulers();
       io.emit("scene:update", scene);
+      tokenHub.resync();
     },
   });
+  registerTokenRoutes({ app, tokens, hub: tokenHub, requireGm });
 
   // Em produção o servidor entrega o front compilado; em desenvolvimento o Vite cuida disso.
   if (fs.existsSync(config.clientDir)) {
@@ -223,10 +230,15 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   io.on("connection", (socket) => {
     const { user } = socket.data;
     void socket.join(`user:${user.id}`);
+    void socket.join(user.isGm ? "gm" : "players");
     presence.add(user.id, socket.id);
     socket.emit("server:hello", { version: config.version, user });
-    socket.emit("state:snapshot", snapshotFor(scenes.active(), rulers));
+    socket.emit(
+      "state:snapshot",
+      snapshotFor(scenes.active(), rulers, user.isGm ? tokens.list() : tokens.visibleToPlayers()),
+    );
     registerMapSocket(socket, rulers);
+    registerTokenSocket(socket, tokens);
     broadcastPresence();
 
     socket.on("echo:ping", (message, ack) => {

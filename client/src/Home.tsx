@@ -9,6 +9,8 @@ import {
   type SceneSummary,
   type SceneView,
   type ServerToClientEvents,
+  type TokenMove,
+  type TokenView,
   type User,
 } from "@vtt/shared";
 import { api } from "./api";
@@ -24,6 +26,9 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const socketRef = useRef<VttSocket>(null);
   const [activeScene, setActiveScene] = useState<SceneView | null>(null);
   const [rulers, setRulers] = useState<RulerState[]>([]);
+  // Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa.
+  const [tokens, setTokens] = useState<TokenView[]>([]);
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   // Só o mestre: lista de cenas e a cena que ele está olhando em prévia.
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [previewId, setPreviewId] = useState<number | null>(null);
@@ -44,7 +49,14 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
     s.on("state:snapshot", (snapshot) => {
       setActiveScene(snapshot.scene);
       setRulers(snapshot.rulers);
+      setTokens(snapshot.tokens);
     });
+    s.on("tokens:set", setTokens);
+    s.on("token:upsert", (token) => setTokens((current) => upsertToken(current, token)));
+    s.on("token:remove", (id) => setTokens((current) => current.filter((t) => t.id !== id)));
+    s.on("token:move", (id, x, y) =>
+      setTokens((current) => current.map((t) => (t.id === id ? { ...t, x, y } : t))),
+    );
     s.on("scene:update", (scene) => {
       setActiveScene(scene);
       setRulers([]);
@@ -71,11 +83,33 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
     [],
   );
 
+  const sendTokenMove = useCallback((move: TokenMove) => {
+    socketRef.current?.emit("token:move", move);
+    // Ao soltar, a posição fica valendo aqui na hora; se o servidor recusar, ele corrige.
+    if (move.final) {
+      setTokens((current) =>
+        current.map((t) => (t.id === move.id ? { ...t, x: move.x, y: move.y } : t)),
+      );
+    }
+  }, []);
+  const changeToken = useCallback(
+    (token: TokenView) => setTokens((current) => upsertToken(current, token)),
+    [],
+  );
+  const removeToken = useCallback(
+    (id: number) => setTokens((current) => current.filter((t) => t.id !== id)),
+    [],
+  );
+
   const preview = useMemo(
     () => (previewId === null ? undefined : scenes.find((s) => s.id === previewId)),
     [previewId, scenes],
   );
   const shown = preview ?? activeScene;
+  const shownTokens = useMemo(
+    () => (shown ? tokens.filter((t) => t.sceneId === shown.id) : []),
+    [tokens, shown],
+  );
 
   async function leave() {
     await api.logout();
@@ -106,6 +140,11 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         // Na prévia as réguas da cena ativa não fazem sentido, e a régua do mestre não deve vazar.
         rulers={preview && preview.id !== activeScene?.id ? [] : rulers}
         isGm={user.isGm}
+        selfId={user.id}
+        tokens={shownTokens}
+        selectedTokenId={selectedTokenId}
+        onSelectToken={user.isGm ? setSelectedTokenId : noSelect}
+        onMoveToken={sendTokenMove}
         onRuler={preview && preview.id !== activeScene?.id ? noRuler : sendRuler}
         onLeavePreview={() => setPreviewId(null)}
       />
@@ -130,6 +169,12 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           onScenes={setScenes}
           previewId={previewId}
           onPreview={setPreviewId}
+          shownScene={shown}
+          tokens={shownTokens}
+          selectedTokenId={selectedTokenId}
+          onSelectToken={setSelectedTokenId}
+          onTokenChange={changeToken}
+          onTokenRemove={removeToken}
         />
       )}
     </main>
@@ -137,3 +182,10 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
 }
 
 const noRuler = (): void => undefined;
+const noSelect = (): void => undefined;
+
+function upsertToken(list: TokenView[], token: TokenView): TokenView[] {
+  return list.some((t) => t.id === token.id)
+    ? list.map((t) => (t.id === token.id ? token : t))
+    : [...list, token];
+}

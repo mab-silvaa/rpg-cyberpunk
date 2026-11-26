@@ -1,3 +1,5 @@
+import type { TokenMove, TokenView } from "./tokens.js";
+
 export const APP_NAME = "Salandra Cyberpunk";
 
 export interface User {
@@ -97,6 +99,8 @@ export interface RulerState extends RulerLine {
 export interface StateSnapshot {
   scene: SceneView | null;
   rulers: RulerState[];
+  /** Mestre: tokens de todas as cenas. Jogador: só os visíveis da cena ativa. */
+  tokens: TokenView[];
 }
 
 /** Eventos que o cliente envia ao servidor. */
@@ -104,6 +108,8 @@ export interface ClientToServerEvents {
   "echo:ping": (message: string, ack: (reply: EchoReply) => void) => void;
   /** null quando o jogador solta a régua. */
   "ruler:update": (line: RulerLine | null) => void;
+  /** Arrasto de token. O servidor confere dono e papel; se recusar, devolve o token como está. */
+  "token:move": (move: TokenMove) => void;
 }
 
 /** Eventos que o servidor envia ao cliente. */
@@ -116,6 +122,13 @@ export interface ServerToClientEvents {
   "scene:update": (scene: SceneView | null) => void;
   /** Régua de outro jogador; null quando ele a solta. */
   "ruler:update": (userId: number, ruler: RulerState | null) => void;
+  /** Token novo ou alterado. */
+  "token:upsert": (token: TokenView) => void;
+  "token:remove": (id: number) => void;
+  /** Outro usuário está arrastando (ou soltou) um token. */
+  "token:move": (id: number, x: number, y: number) => void;
+  /** Troca a lista inteira de tokens (cena mudou, por exemplo). */
+  "tokens:set": (tokens: TokenView[]) => void;
 }
 
 export interface SocketData {
@@ -131,3 +144,4 @@ export const SCENE_NAME_MAX_LENGTH = 60;
 /** Lado máximo de uma imagem de mapa; acima disso muitos navegadores não desenham. */
 export const MAX_IMAGE_SIDE = 8192;
 export * from "./measure.js";
+export * from "./tokens.js";

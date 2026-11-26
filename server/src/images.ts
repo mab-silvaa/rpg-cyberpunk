@@ -81,20 +81,24 @@ export class Images {
     return (row as ImageRow | undefined) ?? null;
   }
 
-  /** Apaga a imagem (registro e arquivo) se nenhuma cena a usa mais. */
+  /** Apaga a imagem (registro e arquivo) se nenhuma cena nem token a usa mais. */
   deleteIfUnused(id: number | null): void {
     if (id === null) return;
-    const used = this.db.prepare("SELECT 1 FROM scenes WHERE image_id = ? LIMIT 1").get(id);
+    const used =
+      this.db.prepare("SELECT 1 FROM scenes WHERE image_id = ? LIMIT 1").get(id) ??
+      this.db.prepare("SELECT 1 FROM tokens WHERE image_id = ? LIMIT 1").get(id);
     if (used) return;
     this.remove(id);
   }
 
-  /** Apaga imagens enviadas há mais de `olderThanMs` que nenhuma cena usa (uploads abandonados). */
+  /** Apaga imagens enviadas há mais de `olderThanMs` que nenhuma cena nem token usa (uploads abandonados). */
   sweepOrphans(olderThanMs: number): number {
     const cutoff = new Date(Date.now() - olderThanMs).toISOString().slice(0, 19).replace("T", " ");
     const rows = this.db
       .prepare(
-        "SELECT id FROM images WHERE created_at < ? AND id NOT IN (SELECT image_id FROM scenes WHERE image_id IS NOT NULL)",
+        `SELECT id FROM images WHERE created_at < ?
+           AND id NOT IN (SELECT image_id FROM scenes WHERE image_id IS NOT NULL)
+           AND id NOT IN (SELECT image_id FROM tokens WHERE image_id IS NOT NULL)`,
       )
       .all(cutoff) as { id: number }[];
     for (const { id } of rows) this.remove(id);

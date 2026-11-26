@@ -6,6 +6,8 @@ import type {
   PresenceUser,
   SceneInput,
   SceneSummary,
+  TokenInput,
+  TokenView,
   TunnelInfo,
   User,
 } from "@vtt/shared";
@@ -48,6 +50,10 @@ export const api = {
     request<SceneSummary[]>("PATCH", `/api/scenes/${id}`, input),
   activateScene: (id: number) => request<SceneSummary[]>("POST", `/api/scenes/${id}/activate`),
   deleteScene: (id: number) => request<SceneSummary[]>("DELETE", `/api/scenes/${id}`),
+  createToken: (input: TokenInput) => request<TokenView>("POST", "/api/tokens", input),
+  updateToken: (id: number, input: TokenInput) =>
+    request<TokenView>("PATCH", `/api/tokens/${id}`, input),
+  deleteToken: (id: number) => request<void>("DELETE", `/api/tokens/${id}`),
   uploadImage: (file: File) => {
     const form = new FormData();
     form.append("file", file);

@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
-import type { PresenceUser, SceneSummary, TunnelInfo, User } from "@vtt/shared";
+import type {
+  PresenceUser,
+  SceneSummary,
+  SceneView,
+  TokenView,
+  TunnelInfo,
+  User,
+} from "@vtt/shared";
 import { api } from "./api";
 import { ScenesPanel } from "./ScenesPanel";
+import { TokensPanel } from "./TokensPanel";
 
 interface Props {
   self: User;
@@ -10,9 +18,28 @@ interface Props {
   onScenes: (scenes: SceneSummary[]) => void;
   previewId: number | null;
   onPreview: (id: number | null) => void;
+  shownScene: SceneView | null;
+  tokens: TokenView[];
+  selectedTokenId: number | null;
+  onSelectToken: (id: number | null) => void;
+  onTokenChange: (token: TokenView) => void;
+  onTokenRemove: (id: number) => void;
 }
 
-export function GmPanel({ self, players, scenes, onScenes, previewId, onPreview }: Props) {
+export function GmPanel({
+  self,
+  players,
+  scenes,
+  onScenes,
+  previewId,
+  onPreview,
+  shownScene,
+  tokens,
+  selectedTokenId,
+  onSelectToken,
+  onTokenChange,
+  onTokenRemove,
+}: Props) {
   const [tunnel, setTunnel] = useState<TunnelInfo>();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string>();
@@ -75,6 +102,16 @@ export function GmPanel({ self, players, scenes, onScenes, previewId, onPreview 
         onScenes={onScenes}
         previewId={previewId}
         onPreview={onPreview}
+      />
+
+      <TokensPanel
+        scene={shownScene}
+        tokens={tokens}
+        players={players}
+        selectedId={selectedTokenId}
+        onSelect={onSelectToken}
+        onChange={onTokenChange}
+        onRemove={onTokenRemove}
       />
 
       <h3>Jogadores</h3>

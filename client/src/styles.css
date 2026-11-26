@@ -314,3 +314,24 @@ button.danger {
   cursor: pointer;
   font-weight: 600;
 }
+
+.tokens li.selected > .scene-line {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.token-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.scene-form select {
+  width: 100%;
+}
