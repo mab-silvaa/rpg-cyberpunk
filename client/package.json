@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@vtt/shared": "^0.1.0",
+    "konva": "^10.11.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-konva": "^19.3.2",
     "socket.io-client": "^4.8.4"
   },
   "devDependencies": {

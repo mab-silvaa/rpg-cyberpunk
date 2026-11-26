@@ -47,15 +47,75 @@ export interface ServerHello {
   user: User;
 }
 
+/** A cena como os jogadores a enxergam. Coordenadas do mapa são em pixels da imagem. */
+export interface SceneView {
+  id: number;
+  name: string;
+  imageUrl: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  gridPx: number;
+  metersPerSquare: number;
+  gridVisible: boolean;
+}
+
+/** A cena na lista do mestre. */
+export interface SceneSummary extends SceneView {
+  imageId: number | null;
+  isActive: boolean;
+}
+
+/** Campos que o mestre pode mudar numa cena. */
+export interface SceneInput {
+  name?: string;
+  imageId?: number | null;
+  gridPx?: number;
+  metersPerSquare?: number;
+  gridVisible?: boolean;
+}
+
+export interface ImageInfo {
+  id: number;
+  url: string;
+  width: number;
+  height: number;
+}
+
+/** Régua arrastada no mapa, em pixels da imagem. */
+export interface RulerLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface RulerState extends RulerLine {
+  userId: number;
+  name: string;
+}
+
+export interface StateSnapshot {
+  scene: SceneView | null;
+  rulers: RulerState[];
+}
+
 /** Eventos que o cliente envia ao servidor. */
 export interface ClientToServerEvents {
   "echo:ping": (message: string, ack: (reply: EchoReply) => void) => void;
+  /** null quando o jogador solta a régua. */
+  "ruler:update": (line: RulerLine | null) => void;
 }
 
 /** Eventos que o servidor envia ao cliente. */
 export interface ServerToClientEvents {
   "server:hello": (info: ServerHello) => void;
   "presence:update": (users: PresenceUser[]) => void;
+  /** Estado da mesa, enviado ao conectar. */
+  "state:snapshot": (snapshot: StateSnapshot) => void;
+  /** A cena ativa mudou (ou ficou sem cena, com null). */
+  "scene:update": (scene: SceneView | null) => void;
+  /** Régua de outro jogador; null quando ele a solta. */
+  "ruler:update": (userId: number, ruler: RulerState | null) => void;
 }
 
 export interface SocketData {
@@ -64,3 +124,10 @@ export interface SocketData {
 
 export const NAME_MAX_LENGTH = 32;
 export const SESSION_DAYS = 30;
+
+export const GRID_PX_MIN = 10;
+export const GRID_PX_MAX = 500;
+export const SCENE_NAME_MAX_LENGTH = 60;
+/** Lado máximo de uma imagem de mapa; acima disso muitos navegadores não desenham. */
+export const MAX_IMAGE_SIDE = 8192;
+export * from "./measure.js";

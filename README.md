@@ -9,7 +9,9 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 - Fase 0: monorepo, servidor com health check, front React, SQLite com migrações e CI
 - Fase 1: entrada por nome, senha do mestre, painel do mestre (link do tunnel, renomear e expulsar jogadores) e Docker com Cloudflare quick tunnel
 
-O mapa, os tokens e o resto do jogo chegam nas próximas fases.
+- Fase 2: cenas com imagem de fundo enviada pelo mestre, grid configurável, zoom, pan, régua (os outros veem a régua em tempo real) e prévia de cenas no painel do mestre
+
+Tokens, fog of war, dados e fichas chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
 
 ## Desenvolvimento no Linux
 
@@ -53,6 +55,7 @@ O container roda com o seu usuário (`HOST_UID` e `HOST_GID` no `.env`, preenchi
 | `GM_PASSWORD`        | Senha para entrar como mestre. Sem ela, o login de mestre fica desativado |
 | `SESSION_SECRET`     | Assina os cookies de sessão. Se faltar, o app gera um e guarda em `data/` |
 | `DATA_DIR`           | Pasta do banco e dos uploads (`data-dev/` em desenvolvimento)             |
+| `MAX_UPLOAD_MB`      | Tamanho máximo de cada imagem enviada (15). Lado máximo: 8192 px          |
 | `PORT`               | Porta do servidor (3000)                                                  |
 | `TRUST_PROXY`        | `1` atrás do tunnel, para enxergar o IP real; o compose já define         |
 | `TUNNEL_METRICS_URL` | Onde ler o link do quick tunnel; o compose já define                      |

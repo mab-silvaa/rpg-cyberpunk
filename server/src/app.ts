@@ -2,7 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { Server } from "socket.io";
+import { Server, type Socket } from "socket.io";
 import type Database from "better-sqlite3";
 import type {
   ApiError,
@@ -27,8 +27,18 @@ import {
   verifySessionToken,
 } from "./session.js";
 import { normalizeName, Presence, Users } from "./users.js";
+import { Images } from "./images.js";
+import { registerMapRoutes, registerMapSocket, snapshotFor } from "./map.js";
+import { Scenes } from "./scenes.js";
 
 export type VttServer = Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  Record<string, never>,
+  SocketData
+>;
+
+export type VttSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
   Record<string, never>,
@@ -78,6 +88,11 @@ export function createApp(config: Config, db: Database.Database): AppContext {
 
   const presenceList = (): PresenceUser[] =>
     users.list().map((user) => ({ ...user, online: presence.isOnline(user.id) }));
+
+  const images = new Images(db, path.join(config.dataDir, "uploads"));
+  const scenes = new Scenes(db, images);
+  // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
+  images.sweepOrphans(24 * 60 * 60 * 1000);
 
   const httpServer = http.createServer(app);
   const io: VttServer = new Server(httpServer);
@@ -178,6 +193,20 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     res.json(info);
   });
 
+  const { clearRulers, rulers } = registerMapRoutes({
+    app,
+    config,
+    images,
+    scenes,
+    requireUser,
+    requireGm,
+    emitScene: (scene) => {
+      // Ao trocar de cena, as réguas da cena antiga somem.
+      clearRulers();
+      io.emit("scene:update", scene);
+    },
+  });
+
   // Em produção o servidor entrega o front compilado; em desenvolvimento o Vite cuida disso.
   if (fs.existsSync(config.clientDir)) {
     app.use(express.static(config.clientDir));
@@ -196,6 +225,8 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     void socket.join(`user:${user.id}`);
     presence.add(user.id, socket.id);
     socket.emit("server:hello", { version: config.version, user });
+    socket.emit("state:snapshot", snapshotFor(scenes.active(), rulers));
+    registerMapSocket(socket, rulers);
     broadcastPresence();
 
     socket.on("echo:ping", (message, ack) => {
