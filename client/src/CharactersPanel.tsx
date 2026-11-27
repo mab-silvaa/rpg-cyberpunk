@@ -11,6 +11,7 @@ import {
 } from "@vtt/shared";
 import { api } from "./api";
 import { CharacterSheet } from "./CharacterSheet";
+import { Badge, Button, ErrorText, MoreMenu, Panel, SelectField, useConfirm } from "./ui";
 
 interface Props {
   user: User;
@@ -24,6 +25,7 @@ interface Props {
 
 export const characterName = (c: CharacterView): string => c.data.handle || CHARACTER_NAME_FALLBACK;
 
+/** Fichas: o jogador vê a própria; o mestre vê a lista, cria NPCs e troca o dono. */
 export function CharactersPanel({
   user,
   characters,
@@ -33,6 +35,7 @@ export function CharactersPanel({
   onCreated,
   onRemoved,
 }: Props) {
+  const confirm = useConfirm();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [error, setError] = useState<string>();
   const selected = characters.find((c) => c.id === selectedId) ?? characters[0] ?? null;
@@ -53,102 +56,114 @@ export function CharactersPanel({
       setSelectedId(created.id);
     });
 
+  async function remove(c: CharacterView) {
+    const ok = await confirm({
+      title: `Excluir a ficha "${characterName(c)}"?`,
+      message: "A ficha e o que está nela são apagados.",
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (!ok) return;
+    void run(async () => {
+      await api.deleteCharacter(c.id);
+      onRemoved(c.id);
+    });
+  }
+
   const ownerName = (c: CharacterView): string =>
     c.ownerId === null ? "NPC" : (players.find((p) => p.id === c.ownerId)?.name ?? "jogador");
 
+  const sheet = selected && (
+    <CharacterSheet key={selected.id} character={selected} onSave={onSave} onRoll={onRoll} />
+  );
+
+  if (!user.isGm) {
+    return (
+      <>
+        {characters.length === 0 && (
+          <div className="card-body">
+            <p className="details">Você ainda não tem uma ficha.</p>
+            <div className="actions">
+              <Button variant="primary" icon="plus" onClick={() => void create(null)}>
+                Criar minha ficha
+              </Button>
+            </div>
+          </div>
+        )}
+        <ErrorText>{error}</ErrorText>
+        {sheet}
+      </>
+    );
+  }
+
   return (
-    <section className="card">
-      <h2>{user.isGm ? "Fichas" : "Minha ficha"}</h2>
-      {characters.length === 0 && !user.isGm && (
-        <p className="details">Você ainda não tem uma ficha.</p>
-      )}
-      {(user.isGm || characters.length === 0) && (
-        <div className="row">
-          {user.isGm ? (
-            <>
-              <button onClick={() => void create(null)}>Nova ficha de NPC</button>
-              <select
-                aria-label="Nova ficha para o jogador"
-                value=""
-                onChange={(e) => e.target.value && void create(Number(e.target.value))}
-              >
-                <option value="">Nova ficha para um jogador...</option>
-                {players
-                  .filter((p) => !p.isGm)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
-            </>
-          ) : (
-            <button onClick={() => void create(null)}>Criar minha ficha</button>
-          )}
-        </div>
-      )}
-      {characters.length > 1 || (user.isGm && characters.length > 0) ? (
-        <ul className="scenes characters">
-          {characters.map((c) => (
-            <li key={c.id} className={selected?.id === c.id ? "selected" : ""}>
-              <div className="scene-line">
-                <button className="link token-name" onClick={() => setSelectedId(c.id)}>
-                  {characterName(c)}
-                  <strong className={c.ownerId === null ? "badge preview" : "badge"}>
-                    {ownerName(c)}
-                  </strong>
-                </button>
-                {user.isGm && (
-                  <span className="actions">
-                    <select
-                      aria-label={`Dono de ${characterName(c)}`}
-                      value={c.ownerId ?? ""}
-                      onChange={(e) =>
-                        void run(() =>
-                          api.assignCharacter(
-                            c.id,
-                            e.target.value === "" ? null : Number(e.target.value),
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">NPC (sem jogador)</option>
-                      {players
-                        .filter((p) => !p.isGm)
-                        .map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      className="link danger"
-                      onClick={() => {
-                        if (window.confirm(`Excluir a ficha "${characterName(c)}"?`)) {
-                          void run(async () => {
-                            await api.deleteCharacter(c.id);
-                            onRemoved(c.id);
-                          });
-                        }
-                      }}
-                    >
-                      Excluir
-                    </button>
-                  </span>
-                )}
-              </div>
-            </li>
+    <Panel title="Fichas" gm count={characters.length}>
+      <div className="actions">
+        <Button icon="plus" onClick={() => void create(null)}>
+          Nova ficha de NPC
+        </Button>
+      </div>
+      <SelectField
+        label="Nova ficha para um jogador"
+        value=""
+        onChange={(e) => e.target.value && void create(Number(e.target.value))}
+      >
+        <option value="">Escolha o jogador...</option>
+        {players
+          .filter((p) => !p.isGm)
+          .map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
           ))}
-        </ul>
-      ) : null}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      </SelectField>
+      <ul className="list">
+        {characters.map((c) => (
+          <li key={c.id} className={`row ${selected?.id === c.id ? "selected" : ""}`}>
+            <span className="row-name">
+              <button
+                type="button"
+                aria-pressed={selected?.id === c.id}
+                onClick={() => setSelectedId(c.id)}
+              >
+                {characterName(c)}
+              </button>
+              <Badge tone={c.ownerId === null ? "gm" : "accent"}>{ownerName(c)}</Badge>
+            </span>
+            <MoreMenu
+              label={`Mais ações de ${characterName(c)}`}
+              items={[
+                { label: "Excluir", icon: "trash", danger: true, onSelect: () => void remove(c) },
+              ]}
+            />
+          </li>
+        ))}
+      </ul>
       {selected && (
-        <CharacterSheet key={selected.id} character={selected} onSave={onSave} onRoll={onRoll} />
+        <SelectField
+          label={`Dono de ${characterName(selected)}`}
+          value={selected.ownerId ?? ""}
+          onChange={(e) =>
+            void run(() =>
+              api.assignCharacter(
+                selected.id,
+                e.target.value === "" ? null : Number(e.target.value),
+              ),
+            )
+          }
+        >
+          <option value="">NPC (sem jogador)</option>
+          {players
+            .filter((p) => !p.isGm)
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+        </SelectField>
       )}
-    </section>
+      <ErrorText>{error}</ErrorText>
+      {sheet}
+    </Panel>
   );
 }

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type { FogState, SceneView } from "@vtt/shared";
 import { api } from "./api";
+import { Button, CheckField, ErrorText, Panel, useConfirm } from "./ui";
 
 export function FogPanel({ scene, fog }: { scene: SceneView | null; fog: FogState | null }) {
+  const confirm = useConfirm();
   const [error, setError] = useState<string>();
   if (!scene) return null;
 
@@ -15,46 +17,46 @@ export function FogPanel({ scene, fog }: { scene: SceneView | null; fog: FogStat
     }
   }
 
+  async function coverAll() {
+    const ok = await confirm({
+      title: "Cobrir o mapa inteiro?",
+      message: "Tudo volta a ficar escondido dos jogadores.",
+      confirmLabel: "Cobrir tudo",
+    });
+    if (ok) void run(() => api.coverAllFog(scene!.id));
+  }
+
   const enabled = fog?.enabled ?? false;
   return (
-    <>
-      <h3>Fog of war de "{scene.name}"</h3>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => void run(() => api.fogEnabled(scene.id, e.target.checked))}
-        />
-        Fog ligada (com ela, tudo começa escondido dos jogadores)
-      </label>
+    <Panel title="Fog" gm>
+      <CheckField
+        label="Fog ligada: tudo começa escondido"
+        gm
+        checked={enabled}
+        onChange={(e) => void run(() => api.fogEnabled(scene.id, e.target.checked))}
+      />
       {enabled ? (
         <>
-          <p className="details">
-            Use as ferramentas de fog no mapa (retângulo e pincel, para revelar ou cobrir). Você vê
-            a fog translúcida; os jogadores veem preto. Token sob fog não chega aos jogadores.
-          </p>
-          <div className="row fog-actions">
-            <button onClick={() => void run(() => api.undoFog(scene.id))}>Desfazer</button>
-            <button onClick={() => void run(() => api.revealAllFog(scene.id))}>Revelar tudo</button>
-            <button
-              onClick={() => {
-                if (window.confirm("Cobrir o mapa inteiro de novo?")) {
-                  void run(() => api.coverAllFog(scene.id));
-                }
-              }}
-            >
+          <div className="actions">
+            <Button size="sm" onClick={() => void run(() => api.undoFog(scene.id))}>
+              Desfazer
+            </Button>
+            <Button size="sm" onClick={() => void run(() => api.revealAllFog(scene.id))}>
+              Revelar tudo
+            </Button>
+            <Button size="sm" variant="gm" onClick={() => void coverAll()}>
               Cobrir tudo
-            </button>
+            </Button>
           </div>
+          <p className="details">
+            Ferramentas de revelar e cobrir ficam na barra do mapa. Você vê a fog em hachura; os
+            jogadores veem preto, e token sob fog não chega até eles.
+          </p>
         </>
       ) : (
         <p className="details">Fog desligada: os jogadores veem o mapa inteiro.</p>
       )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </>
+      <ErrorText>{error}</ErrorText>
+    </Panel>
   );
 }

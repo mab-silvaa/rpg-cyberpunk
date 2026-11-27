@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { maxHp, type CharacterView, type SceneView } from "@vtt/shared";
 import { api } from "./api";
+import { Button, CheckField, ErrorText, MoreMenu, Panel } from "./ui";
 
 interface Props {
   scene: SceneView | null;
@@ -41,56 +42,47 @@ export function NpcPanel({ scene, characters, onCreated }: Props) {
     run(async () => onCreated(await api.createCharacter({ ownerId: null, data: npc.data })));
 
   return (
-    <>
-      <h3>NPCs</h3>
+    <Panel title="NPCs" gm count={npcs.length}>
       {npcs.length === 0 ? (
         <p className="details">
-          Nenhum NPC. Crie uma ficha de NPC em "Fichas" e ela aparece aqui, com o atalho para
+          Nenhum NPC. Crie uma ficha de NPC na aba Mesa e ela aparece aqui, com o atalho para
           colocar no mapa.
         </p>
       ) : (
         <>
-          <label className="check">
-            <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
-            Colocar escondido dos jogadores
-          </label>
-          <ul className="scenes npcs">
+          <CheckField
+            label="Colocar escondido dos jogadores"
+            gm
+            checked={hidden}
+            onChange={(e) => setHidden(e.target.checked)}
+          />
+          <ul className="list">
             {npcs.map((npc) => (
-              <li key={npc.id}>
-                <div className="scene-line">
-                  <span>
+              <li key={npc.id} className="row">
+                <span className="row-name">
+                  <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                     <strong>{npc.data.handle || "Sem nome"}</strong>
                     {npc.data.role && ` · ${npc.data.role}`}
-                    <span className="details">
-                      {" "}
-                      · HP {npc.data.hpCurrent}/{maxHp(npc.data)} · SP {npc.data.headSp}/
+                    <span className="row-sub t-mono">
+                      HP {npc.data.hpCurrent}/{maxHp(npc.data)} · SP {npc.data.headSp}/
                       {npc.data.bodySp} · REF {npc.data.stats.REF} · {npc.data.weapons.length}{" "}
                       {npc.data.weapons.length === 1 ? "arma" : "armas"}
                     </span>
                   </span>
-                  <span className="actions">
-                    <button
-                      className="link"
-                      disabled={!scene || busy}
-                      onClick={() => void place(npc)}
-                    >
-                      Colocar no mapa
-                    </button>
-                    <button className="link" disabled={busy} onClick={() => void duplicate(npc)}>
-                      Duplicar
-                    </button>
-                  </span>
-                </div>
+                </span>
+                <Button size="sm" disabled={!scene || busy} onClick={() => void place(npc)}>
+                  Colocar no mapa
+                </Button>
+                <MoreMenu
+                  label={`Mais ações de ${npc.data.handle || "NPC"}`}
+                  items={[{ label: "Duplicar", icon: "copy", onSelect: () => void duplicate(npc) }]}
+                />
               </li>
             ))}
           </ul>
         </>
       )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </>
+      <ErrorText>{error}</ErrorText>
+    </Panel>
   );
 }

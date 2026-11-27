@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NOTE_BODY_MAX_LENGTH, NOTE_TITLE_MAX_LENGTH, type Note } from "@vtt/shared";
 import { api } from "./api";
 import { Markdown } from "./Markdown";
+import { Badge, Button, ErrorText, MoreMenu, Panel, TextArea, TextField, useConfirm } from "./ui";
 
 const SAVE_DELAY_MS = 800;
 
@@ -36,27 +37,41 @@ function Editor({ note, onSaved }: { note: Note; onSaved: (note: Note) => void }
   }
 
   return (
-    <div className="note-editor">
-      <div className="row">
-        <input
-          aria-label="Título da nota"
-          value={title}
-          maxLength={NOTE_TITLE_MAX_LENGTH}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            change({ title: e.target.value, body });
-          }}
-        />
-        <button onClick={() => setPreview(!preview)}>{preview ? "Editar" : "Ver formatado"}</button>
-        <span className={`save-state save-${status === "salva" ? "salvo" : status}`} role="status">
-          {status === "salva" ? "Salva" : status === "salvando" ? "Salvando..." : "Não salvou"}
+    <div className="form sub-form">
+      <TextField
+        label="Título da nota"
+        value={title}
+        maxLength={NOTE_TITLE_MAX_LENGTH}
+        onChange={(e) => {
+          setTitle(e.target.value);
+          change({ title: e.target.value, body });
+        }}
+      />
+      <div className="actions">
+        <Button size="sm" icon={preview ? "note" : "eye"} onClick={() => setPreview(!preview)}>
+          {preview ? "Editar" : "Ver formatado"}
+        </Button>
+        <span role="status">
+          {status === "salva" ? (
+            <Badge tone="ok" icon="check">
+              Salva
+            </Badge>
+          ) : status === "salvando" ? (
+            <Badge tone="accent" icon="refresh">
+              Salvando...
+            </Badge>
+          ) : (
+            <Badge tone="danger" icon="alert">
+              Não salvou
+            </Badge>
+          )}
         </span>
       </div>
       {preview ? (
         <Markdown source={body} />
       ) : (
-        <textarea
-          aria-label="Texto da nota"
+        <TextArea
+          label="Texto da nota"
           rows={10}
           value={body}
           maxLength={NOTE_BODY_MAX_LENGTH}
@@ -67,17 +82,14 @@ function Editor({ note, onSaved }: { note: Note; onSaved: (note: Note) => void }
           }}
         />
       )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }
 
 /** Notas privadas do mestre, em Markdown, com autosave. */
 export function NotesPanel() {
+  const confirm = useConfirm();
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [error, setError] = useState<string>();
@@ -98,7 +110,13 @@ export function NotesPanel() {
   }
 
   async function remove(note: Note) {
-    if (!window.confirm(`Apagar a nota "${note.title}"?`)) return;
+    const ok = await confirm({
+      title: `Apagar "${note.title}"?`,
+      message: "A nota some para sempre.",
+      confirmLabel: "Apagar",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteNote(note.id);
       setNotes((list) => list.filter((n) => n.id !== note.id));
@@ -110,24 +128,31 @@ export function NotesPanel() {
 
   const selected = notes.find((n) => n.id === selectedId);
   return (
-    <>
-      <h3>Notas do mestre</h3>
+    <Panel title="Notas do mestre" gm count={notes.length}>
       <p className="details">Só você vê. Escritas em Markdown.</p>
-      <button onClick={() => void create()}>Nova nota</button>
-      <ul className="scenes notes">
+      <div className="actions">
+        <Button icon="plus" onClick={() => void create()}>
+          Nova nota
+        </Button>
+      </div>
+      <ul className="list">
         {notes.map((note) => (
-          <li key={note.id} className={selectedId === note.id ? "selected" : ""}>
-            <div className="scene-line">
+          <li key={note.id} className={`row ${selectedId === note.id ? "selected" : ""}`}>
+            <span className="row-name">
               <button
-                className="link token-name"
+                type="button"
+                aria-pressed={selectedId === note.id}
                 onClick={() => setSelectedId(selectedId === note.id ? null : note.id)}
               >
                 {note.title}
               </button>
-              <button className="link danger" onClick={() => void remove(note)}>
-                Apagar
-              </button>
-            </div>
+            </span>
+            <MoreMenu
+              label={`Mais ações de ${note.title}`}
+              items={[
+                { label: "Apagar", icon: "trash", danger: true, onSelect: () => void remove(note) },
+              ]}
+            />
           </li>
         ))}
       </ul>
@@ -139,11 +164,7 @@ export function NotesPanel() {
           onSaved={(saved) => setNotes((list) => list.map((n) => (n.id === saved.id ? saved : n)))}
         />
       )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </>
+      <ErrorText>{error}</ErrorText>
+    </Panel>
   );
 }

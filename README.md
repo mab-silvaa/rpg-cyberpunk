@@ -4,6 +4,10 @@ VTT (mesa virtual) próprio para a campanha de Cyberpunk RED: mapa com tokens em
 
 A spec e o plano de implementação estão em documentos separados do projeto. O plano divide o trabalho em 10 fases, cada uma um pull request.
 
+## Interface
+
+O visual segue o sistema de design Salandra · Neon Grid. Veja [docs/design-system.md](docs/design-system.md): a regra é não inventar componentes fora do sistema.
+
 ## Status
 
 - Fase 0: monorepo, servidor com health check, front React, SQLite com migrações e CI

@@ -6,26 +6,49 @@ import {
   type RollResult,
   type TermResult,
 } from "@vtt/shared";
+import { Icon } from "./icons";
+import { Badge, Button, Card, CheckField, ErrorText, IconButton, Stepper, Field } from "./ui";
 
-interface Props {
-  rolls: RollResult[];
-  isGm: boolean;
-  onRoll: (request: RollRequest) => Promise<RollReply>;
+type OnRoll = (request: RollRequest) => Promise<RollReply>;
+
+export const QUICK_DICE = [4, 6, 8, 10, 12, 20, 100];
+
+/** Estado compartilhado das peças de dados: expressão, rolagem secreta e erro. */
+export function useDice(onRoll: OnRoll, isGm: boolean) {
+  const [expression, setExpression] = useState("");
+  const [secret, setSecret] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function send(text: string, label?: string, forceSecret?: boolean) {
+    setError(undefined);
+    const reply = await onRoll({
+      expression: text,
+      secret: isGm && (forceSecret ?? secret),
+      ...(label ? { label } : {}),
+    });
+    if (!reply.ok) setError(reply.error);
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (expression.trim()) void send(expression);
+  }
+
+  return { expression, setExpression, secret, setSecret, error, send, submit };
 }
-
-const QUICK_DICE = [4, 6, 8, 10, 12, 20, 100];
+export type Dice = ReturnType<typeof useDice>;
 
 function TermDetail({ term }: { term: TermResult }) {
+  const sign = term.sign === -1 ? "−" : "+";
   if (term.kind === "number")
     return (
-      <span className="term">
-        {term.sign === -1 ? "−" : "+"}
-        {term.value}
+      <span>
+        {sign}
+        {term.value}{" "}
       </span>
     );
-  const sign = term.sign === -1 ? "−" : "+";
   return (
-    <span className="term">
+    <span>
       {sign}
       {term.count}d{term.sides}
       {term.test ? "!" : ""} [
@@ -42,132 +65,273 @@ function TermDetail({ term }: { term: TermResult }) {
       ) : (
         term.rolls.join(", ")
       )}
-      ]
+      ]{" "}
     </span>
   );
 }
 
-function RollLine({ roll }: { roll: RollResult }) {
+function rollInfo(roll: RollResult) {
   const effect = roll.terms.find((t) => t.kind === "dice" && t.testEffect);
+  const testEffect = effect?.kind === "dice" ? effect.testEffect : undefined;
+  const tone = roll.secret
+    ? "secret"
+    : roll.critical || testEffect === "explode"
+      ? "crit"
+      : testEffect === "fumble"
+        ? "fumble"
+        : "";
+  return { testEffect, tone };
+}
+
+function RollBadges({ roll }: { roll: RollResult }) {
+  const { testEffect } = rollInfo(roll);
+  return (
+    <>
+      {roll.secret && (
+        <Badge tone="gm" icon="eyeoff">
+          Secreta
+        </Badge>
+      )}
+      {testEffect === "explode" && <Badge tone="ok">10 natural</Badge>}
+      {testEffect === "fumble" && <Badge tone="danger">1 natural</Badge>}
+      {roll.critical && <Badge tone="turn">Crítico</Badge>}
+    </>
+  );
+}
+
+/** Cada rolagem é um cartão; o total é o protagonista, colorido pelo resultado. */
+function RollCard({ roll }: { roll: RollResult }) {
+  const { tone } = rollInfo(roll);
+  const cardTone = roll.secret
+    ? "gm"
+    : tone === "crit"
+      ? "turn"
+      : tone === "fumble"
+        ? "danger"
+        : undefined;
   return (
     <li className={roll.secret ? "roll secret" : "roll"}>
-      <div>
-        <strong>{roll.userName}</strong>
-        {roll.label ? ` · ${roll.label}` : ""} <code>{roll.expression}</code>
-        {roll.secret && <strong className="badge preview">secreta</strong>}
-        {roll.critical && <strong className="badge crit">crítico</strong>}
-        {effect?.kind === "dice" && effect.testEffect === "explode" && (
-          <strong className="badge">10 natural</strong>
-        )}
-        {effect?.kind === "dice" && effect.testEffect === "fumble" && (
-          <strong className="badge crit">1 natural</strong>
-        )}
-      </div>
-      <div className="roll-total">
-        <span className="details">
-          {roll.terms.map((t, i) => (
-            <TermDetail key={i} term={t} />
-          ))}
-        </span>
-        <span className="total" aria-label={`Total ${roll.total}`}>
-          = {roll.total}
-        </span>
-      </div>
+      <Card tone={cardTone}>
+        <div className="roll-body">
+          <div className="roll-head">
+            <span className="t-label">{roll.userName}</span>
+            <span style={{ flex: 1 }} />
+            <RollBadges roll={roll} />
+          </div>
+          <div className="roll-expr">
+            {roll.label ? `${roll.label} · ` : ""}
+            {roll.expression}
+          </div>
+          <div className="roll-parts">
+            {roll.terms.map((t, i) => (
+              <TermDetail key={i} term={t} />
+            ))}
+          </div>
+          <div className={`total ${tone}`} aria-label={`Total ${roll.total}`}>
+            = {roll.total}
+          </div>
+        </div>
+      </Card>
     </li>
   );
 }
 
-export function DicePanel({ rolls, isGm, onRoll }: Props) {
-  const [expression, setExpression] = useState("");
-  const [secret, setSecret] = useState(false);
-  const [modifier, setModifier] = useState(0);
-  const [damageDice, setDamageDice] = useState(3);
-  const [error, setError] = useState<string>();
-
-  async function send(text: string, label?: string) {
-    setError(undefined);
-    const reply = await onRoll({
-      expression: text,
-      secret: isGm && secret,
-      ...(label ? { label } : {}),
-    });
-    if (!reply.ok) setError(reply.error);
-  }
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (expression.trim()) void send(expression);
-  }
-
-  const testExpression = `1d10!${modifier < 0 ? "-" : "+"}${Math.abs(modifier)}`;
-
+/** Histórico completo, mais recente primeiro. */
+export function RollHistory({ rolls }: { rolls: RollResult[] }) {
+  if (rolls.length === 0) return <p className="details">Nenhuma rolagem ainda.</p>;
   return (
-    <section className="card dice">
-      <h2>Dados</h2>
-      <form className="dice-form" onSubmit={submit}>
+    <ul className="rolls" aria-label="Histórico de rolagens">
+      {[...rolls].reverse().map((roll) => (
+        <RollCard key={roll.id} roll={roll} />
+      ))}
+    </ul>
+  );
+}
+
+/** Última rolagem: fica fixa na barra do mapa e no topo da aba Dados. */
+export function LastRoll({ roll }: { roll: RollResult | undefined }) {
+  if (!roll) {
+    return (
+      <div className="dice-last">
+        <span className="t-label">Última rolagem</span>
+        <span className="details">Nenhuma ainda.</span>
+      </div>
+    );
+  }
+  const { tone } = rollInfo(roll);
+  return (
+    <div className="dice-last" aria-live="polite">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span className="t-label">Última rolagem</span>
+        <span style={{ flex: 1 }} />
+        <RollBadges roll={roll} />
+      </div>
+      <div className="details t-mono">
+        {roll.userName} · {roll.expression}
+      </div>
+      <div className={`total-big total ${tone}`}>= {roll.total}</div>
+      <div className="roll-parts">
+        {roll.terms.map((t, i) => (
+          <TermDetail key={i} term={t} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DiceRow({ dice, sides }: { dice: Dice; sides: number[] }) {
+  return (
+    <div className="dice-row">
+      {sides.map((s) => (
+        <button key={s} type="button" className="die" onClick={() => void dice.send(`1d${s}`)}>
+          d{s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ExpressionRow({ dice, isGm }: { dice: Dice; isGm: boolean }) {
+  return (
+    <form className="dice-row" style={{ gap: 8 }} onSubmit={dice.submit}>
+      <span className="control mono" style={{ flex: 1, minWidth: 0 }}>
         <input
-          aria-label="Rolagem"
-          value={expression}
-          onChange={(e) => setExpression(e.target.value)}
+          aria-label="Expressão de dados"
+          value={dice.expression}
+          onChange={(e) => dice.setExpression(e.target.value)}
           maxLength={DICE_MAX_EXPRESSION_LENGTH}
           placeholder="2d6+3"
         />
-        <button type="submit">Rolar</button>
-        {isGm && (
-          <label className="check">
-            <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} />
-            Secreta (só o mestre vê)
-          </label>
-        )}
-      </form>
-      <div className="dice-quick">
-        {QUICK_DICE.map((sides) => (
-          <button key={sides} onClick={() => void send(`1d${sides}`)}>
-            d{sides}
-          </button>
-        ))}
+      </span>
+      <Button type="submit" variant="primary">
+        Rolar
+      </Button>
+      {isGm && (
+        <IconButton
+          icon="eyeoff"
+          label="Rolar em segredo (só o mestre vê)"
+          variant="gm"
+          disabled={!dice.expression.trim()}
+          onClick={() => {
+            if (dice.expression.trim()) void dice.send(dice.expression, undefined, true);
+          }}
+        />
+      )}
+    </form>
+  );
+}
+
+/** Barra de dados fixa sobre o mapa (PC). */
+export function DiceBar({
+  dice,
+  isGm,
+  last,
+}: {
+  dice: Dice;
+  isGm: boolean;
+  last: RollResult | undefined;
+}) {
+  return (
+    <div className="float dice-bar">
+      <div className="float-in">
+        <div className="dice-bar-body">
+          <div className="dice-controls">
+            <DiceRow dice={dice} sides={QUICK_DICE.slice(0, 6)} />
+            <ExpressionRow dice={dice} isGm={isGm} />
+            {dice.error && (
+              <span className="field-msg" role="alert">
+                <Icon name="alert" size={14} />
+                {dice.error}
+              </span>
+            )}
+          </div>
+          <LastRoll roll={last} />
+        </div>
       </div>
-      <div className="dice-quick">
-        <label>
-          Teste (STAT + skill)
-          <input
-            type="number"
+    </div>
+  );
+}
+
+/** Teste (1d10 explosivo + STAT e skill) e dano em d6. */
+export function TestControls({ dice, isGm }: { dice: Dice; isGm: boolean }) {
+  const [modifier, setModifier] = useState(0);
+  const [damageDice, setDamageDice] = useState(3);
+  const testExpression = `1d10!${modifier < 0 ? "-" : "+"}${Math.abs(modifier)}`;
+  return (
+    <div className="form">
+      <div className="form-row">
+        <Field label="Teste (STAT + skill)" group>
+          <Stepper
+            label="Modificador do teste"
             value={modifier}
             min={-100}
             max={100}
-            onChange={(e) => setModifier(Math.trunc(Number(e.target.value)) || 0)}
+            onChange={(n) => setModifier(Math.trunc(n) || 0)}
           />
-        </label>
-        <button onClick={() => void send(testExpression, "Teste")}>Teste {testExpression}</button>
-        <label>
-          Dano (d6)
-          <input
-            type="number"
+        </Field>
+        <Field label="Dano (d6)" group>
+          <Stepper
+            label="Quantidade de d6 de dano"
             value={damageDice}
             min={1}
             max={20}
-            onChange={(e) =>
-              setDamageDice(Math.min(20, Math.max(1, Math.trunc(Number(e.target.value)) || 1)))
-            }
+            onChange={(n) => setDamageDice(Math.min(20, Math.max(1, Math.trunc(n) || 1)))}
           />
-        </label>
-        <button onClick={() => void send(`${damageDice}d6`, "Dano")}>Dano {damageDice}d6</button>
+        </Field>
       </div>
+      <Button
+        variant="primary"
+        size="lg"
+        block
+        icon="dice"
+        onClick={() => void dice.send(testExpression, "Teste")}
+      >
+        Teste {testExpression}
+      </Button>
+      <Button block onClick={() => void dice.send(`${damageDice}d6`, "Dano")}>
+        Dano {damageDice}d6
+      </Button>
+      {isGm && (
+        <CheckField
+          label="Rolagem secreta (só o mestre vê)"
+          gm
+          checked={dice.secret}
+          onChange={(e) => dice.setSecret(e.target.checked)}
+        />
+      )}
       <p className="details">
         No teste, um 10 natural soma outro d10 e um 1 natural subtrai outro d10. No dano, dois ou
         mais 6 contam como crítico. Escreva também contas como 1d10!+8 ou 2d6+1d4−2.
       </p>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <ul className="rolls" aria-label="Histórico de rolagens">
-        {[...rolls].reverse().map((roll) => (
-          <RollLine key={roll.id} roll={roll} />
+      <ErrorText>{dice.error}</ErrorText>
+    </div>
+  );
+}
+
+/** Dados completos, sem a barra do mapa (aba Dados). */
+export function DiceTab({ dice, isGm, rolls }: { dice: Dice; isGm: boolean; rolls: RollResult[] }) {
+  return (
+    <>
+      <Card tone={rolls.at(-1)?.secret ? "gm" : undefined}>
+        <div className="card-body">
+          <LastRoll roll={rolls.at(-1)} />
+        </div>
+      </Card>
+      <div className="dice-row" style={{ overflow: "hidden" }}>
+        {QUICK_DICE.map((s) => (
+          <button
+            key={s}
+            type="button"
+            className="die"
+            style={{ flex: "none", width: 52, height: 48 }}
+            onClick={() => void dice.send(`1d${s}`)}
+          >
+            d{s}
+          </button>
         ))}
-        {rolls.length === 0 && <li className="details">Nenhuma rolagem ainda.</li>}
-      </ul>
-    </section>
+      </div>
+      <ExpressionRow dice={dice} isGm={isGm} />
+      <TestControls dice={dice} isGm={isGm} />
+    </>
   );
 }

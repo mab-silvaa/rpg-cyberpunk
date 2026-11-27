@@ -32,18 +32,26 @@ import { FogLayer } from "./FogLayer";
 import { TokenShape } from "./TokenShape";
 import { useImage } from "./useImage";
 import { fitView, zoomAt, type View } from "./view";
+import { Icon, type IconName } from "./icons";
+import { Button, ToolButton } from "./ui";
 
 const DEFAULT_MAP = { width: 2000, height: 1400 };
 const RULER_EMIT_INTERVAL_MS = 50;
 
 type Tool = "mover" | "regua" | "ret-revelar" | "ret-cobrir" | "pincel-revelar" | "pincel-cobrir";
 
-const FOG_TOOLS: { tool: Tool; label: string }[] = [
-  { tool: "ret-revelar", label: "Revelar ▭" },
-  { tool: "ret-cobrir", label: "Cobrir ▭" },
-  { tool: "pincel-revelar", label: "Revelar pincel" },
-  { tool: "pincel-cobrir", label: "Cobrir pincel" },
+const FOG_TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
+  { tool: "ret-revelar", label: "Revelar com retângulo", icon: "eye" },
+  { tool: "ret-cobrir", label: "Cobrir com retângulo", icon: "fog" },
+  { tool: "pincel-revelar", label: "Revelar com pincel", icon: "brush" },
+  { tool: "pincel-cobrir", label: "Cobrir com pincel", icon: "eyeoff" },
 ];
+
+// Constantes do canvas, direto do sistema de design (prancha 03 · Mapa).
+const BG = "#07080d";
+const ACCENT = "#22e5ff";
+const GM = "#ff4fa8";
+const TEXT = "#e8ecf8";
 
 const fogToolInfo = (tool: Tool): { kind: "rect" | "brush"; mode: FogMode } | null => {
   if (tool === "mover" || tool === "regua") return null;
@@ -75,47 +83,53 @@ interface Props {
   onMoveToken: (move: TokenMove) => void;
   onRuler: (line: RulerLine | null) => void;
   onLeavePreview: () => void;
+  /** Token que está na vez da iniciativa. */
+  turnTokenId?: number | null;
+  /** Há faixa de iniciativa sobre o mapa (a prévia desce para não cobri-la). */
+  hasInitiativeBar?: boolean;
   /** Celular: só olhar (arrastar, régua e fog ficam desligados). */
   viewOnly?: boolean;
 }
-
-const rulerColor = (userId: number): string => `hsl(${(userId * 67) % 360} 85% 62%)`;
 
 function RulerShape({
   line,
   scene,
   scale,
-  color,
+  mine,
   prefix,
 }: {
   line: RulerLine;
   scene: SceneView;
   scale: number;
-  color: string;
+  /** A sua régua tem brilho cheio; as dos outros ficam a 60%. */
+  mine: boolean;
   prefix?: string;
 }) {
   const text = formatMeasure(measureLine(line, scene.gridPx, scene.metersPerSquare));
   return (
-    <Group listening={false}>
+    <Group listening={false} opacity={mine ? 1 : 0.6}>
       <Line
         points={[line.x1, line.y1, line.x2, line.y2]}
-        stroke={color}
+        stroke={ACCENT}
         strokeWidth={2}
+        dash={[8, 6]}
         strokeScaleEnabled={false}
       />
-      <Circle x={line.x1} y={line.y1} radius={4 / scale} fill={color} />
-      <Circle x={line.x2} y={line.y2} radius={4 / scale} fill={color} />
+      <Circle x={line.x1} y={line.y1} radius={4 / scale} fill={ACCENT} />
+      <Circle x={line.x2} y={line.y2} radius={4 / scale} fill={ACCENT} />
       <Label
         x={(line.x1 + line.x2) / 2}
         y={(line.y1 + line.y2) / 2}
         scaleX={1 / scale}
         scaleY={1 / scale}
       >
-        <Tag fill="rgba(11,13,20,0.85)" stroke={color} cornerRadius={4} />
+        <Tag fill="rgba(7,8,13,0.85)" stroke={ACCENT} strokeWidth={1} />
         <Text
           text={prefix ? `${prefix}: ${text}` : text}
-          fill="#e6e9f2"
-          fontSize={13}
+          fontFamily="JetBrains Mono, monospace"
+          fontStyle="600"
+          fill={TEXT}
+          fontSize={12}
           padding={5}
         />
       </Label>
@@ -138,6 +152,8 @@ export function MapView({
   onMoveToken,
   onRuler,
   onLeavePreview,
+  turnTokenId = null,
+  hasInitiativeBar = false,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -280,20 +296,27 @@ export function MapView({
   if (!scene) {
     return (
       <div className="map-empty">
-        {isGm
-          ? "Nenhuma cena ativa. Crie uma cena no painel do mestre."
-          : "Esperando o mestre abrir um mapa."}
+        <Icon name="map" size={32} />
+        <strong>Nenhuma cena ativa</strong>
+        <span>
+          {isGm
+            ? "Crie uma cena na aba Cena do painel e ative-a para os jogadores."
+            : "Aguarde o mestre ativar uma cena."}
+        </span>
       </div>
     );
   }
 
-  const gridLines = (ctx: Konva.Context, shape: Konva.Shape) => {
+  // Grade: rgba(255,255,255,.07), e a cada 5 quadrados .16.
+  const gridLines = (ctx: Konva.Context, shape: Konva.Shape, major: boolean) => {
     ctx.beginPath();
-    for (let x = 0; x <= map.width; x += scene.gridPx) {
+    for (let i = 0, x = 0; x <= map.width; i++, x += scene.gridPx) {
+      if ((i % 5 === 0) !== major) continue;
       ctx.moveTo(x, 0);
       ctx.lineTo(x, map.height);
     }
-    for (let y = 0; y <= map.height; y += scene.gridPx) {
+    for (let j = 0, y = 0; y <= map.height; j++, y += scene.gridPx) {
+      if ((j % 5 === 0) !== major) continue;
       ctx.moveTo(0, y);
       ctx.lineTo(map.width, y);
     }
@@ -337,18 +360,27 @@ export function MapView({
           onMouseLeave={endRuler}
         >
           <Layer>
-            <Rect width={map.width} height={map.height} fill="#10131c" />
+            <Rect width={map.width} height={map.height} fill={BG} />
             {image && (
               <KonvaImage image={image} width={map.width} height={map.height} listening={false} />
             )}
             {scene.gridVisible && (
-              <Shape
-                sceneFunc={gridLines}
-                stroke="rgba(255,255,255,0.28)"
-                strokeWidth={1}
-                strokeScaleEnabled={false}
-                listening={false}
-              />
+              <>
+                <Shape
+                  sceneFunc={(ctx, shape) => gridLines(ctx, shape, false)}
+                  stroke="rgba(255,255,255,0.07)"
+                  strokeWidth={1}
+                  strokeScaleEnabled={false}
+                  listening={false}
+                />
+                <Shape
+                  sceneFunc={(ctx, shape) => gridLines(ctx, shape, true)}
+                  stroke="rgba(255,255,255,0.16)"
+                  strokeWidth={1}
+                  strokeScaleEnabled={false}
+                  listening={false}
+                />
+              </>
             )}
             {fog?.enabled && <FogLayer shapes={fog.shapes} map={map} translucent={isGm} />}
             {[...tokens]
@@ -361,7 +393,7 @@ export function MapView({
                   map={map}
                   scale={view.scale}
                   draggable={!viewOnly && panning && (isGm || token.ownerId === selfId)}
-                  mine={token.ownerId === selfId}
+                  turn={turnTokenId === token.id}
                   selected={selectedTokenId === token.id}
                   onSelect={() => onSelectToken(token.id)}
                   onMove={onMoveToken}
@@ -373,8 +405,8 @@ export function MapView({
                 y={Math.min(draft.y1, draft.y2)}
                 width={Math.abs(draft.x2 - draft.x1)}
                 height={Math.abs(draft.y2 - draft.y1)}
-                fill={draft.mode === "reveal" ? "rgba(80,200,255,0.3)" : "rgba(0,0,0,0.5)"}
-                stroke="#f5e90a"
+                fill={draft.mode === "reveal" ? "rgba(34,229,255,0.25)" : "rgba(255,79,168,0.3)"}
+                stroke={draft.mode === "reveal" ? ACCENT : GM}
                 strokeWidth={1.5}
                 strokeScaleEnabled={false}
                 dash={[6, 4]}
@@ -386,7 +418,7 @@ export function MapView({
                 points={
                   draft.points.length === 2 ? [...draft.points, ...draft.points] : draft.points
                 }
-                stroke={draft.mode === "reveal" ? "rgba(80,200,255,0.35)" : "rgba(0,0,0,0.5)"}
+                stroke={draft.mode === "reveal" ? "rgba(34,229,255,0.35)" : "rgba(255,79,168,0.4)"}
                 strokeWidth={brushSize}
                 lineCap="round"
                 lineJoin="round"
@@ -399,55 +431,95 @@ export function MapView({
                 line={r}
                 scene={scene}
                 scale={view.scale}
-                color={rulerColor(r.userId)}
+                mine={false}
                 prefix={r.name}
               />
             ))}
-            {mine && <RulerShape line={mine} scene={scene} scale={view.scale} color="#f5e90a" />}
+            {mine && <RulerShape line={mine} scene={scene} scale={view.scale} mine />}
           </Layer>
         </Stage>
       )}
 
-      <div className="map-toolbar">
-        {!viewOnly && (
-          <>
-            <button className={tool === "mover" ? "on" : ""} onClick={() => setTool("mover")}>
-              Mover
-            </button>
-            <button className={tool === "regua" ? "on" : ""} onClick={() => setTool("regua")}>
-              Régua
-            </button>
-          </>
-        )}
-        {fogOn && (
-          <>
-            <span className="sep" />
-            {FOG_TOOLS.map(({ tool: t, label }) => (
-              <button key={t} className={tool === t ? "on" : ""} onClick={() => setTool(t)}>
-                {label}
-              </button>
-            ))}
-            <input
-              type="number"
-              aria-label="Tamanho do pincel (px)"
-              title="Tamanho do pincel (px)"
-              min={FOG_BRUSH_MIN}
-              max={FOG_BRUSH_MAX}
-              value={brushSize}
-              onChange={(e) => setBrushPx(Number(e.target.value))}
+      {!viewOnly && (
+        <div className="float map-tools" role="toolbar" aria-label="Ferramentas do mapa">
+          <div className="float-in">
+            <ToolButton
+              icon="move"
+              label="Mover"
+              pressed={tool === "mover"}
+              onClick={() => setTool("mover")}
             />
-          </>
+            <ToolButton
+              icon="ruler"
+              label="Régua"
+              pressed={tool === "regua"}
+              onClick={() => setTool("regua")}
+            />
+            {fogOn && (
+              <>
+                <hr />
+                {FOG_TOOLS.map(({ tool: t, label, icon }) => (
+                  <ToolButton
+                    key={t}
+                    gm
+                    icon={icon}
+                    label={label}
+                    pressed={tool === t}
+                    onClick={() => setTool(t)}
+                  />
+                ))}
+                <div className="brush">
+                  <input
+                    type="number"
+                    aria-label="Tamanho do pincel (px)"
+                    title="Tamanho do pincel (px)"
+                    min={FOG_BRUSH_MIN}
+                    max={FOG_BRUSH_MAX}
+                    value={brushSize}
+                    onChange={(e) => setBrushPx(Number(e.target.value))}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {viewOnly ? (
+        <div className="float map-view-only" style={{ left: 10, top: 10 }}>
+          <div
+            className="float-in"
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px", height: 24 }}
+          >
+            <Icon name="eye" size={14} />
+            <span className="t-label">Só visualização</span>
+          </div>
+        </div>
+      ) : null}
+      <div className="map-zoom">
+        {!viewOnly && (
+          <ToolButton
+            icon="minus"
+            label="Afastar"
+            onClick={() => setView((v) => zoomAt(v, { x: size.width / 2, y: size.height / 2 }, -1))}
+          />
         )}
-        <span className="sep" />
-        <button onClick={() => setView(fitView(size, map))}>Ajustar</button>
-      </div>
-      <div className="map-caption">
-        {scene.name} · {scene.metersPerSquare} m por quadrado
+        {!viewOnly && <span>{Math.round(view.scale * 100)}%</span>}
+        {!viewOnly && (
+          <ToolButton
+            icon="plus"
+            label="Aproximar"
+            onClick={() => setView((v) => zoomAt(v, { x: size.width / 2, y: size.height / 2 }, 1))}
+          />
+        )}
+        <ToolButton icon="fit" label="Ajustar" onClick={() => setView(fitView(size, map))} />
       </div>
       {preview && (
-        <div className="map-preview" role="status">
-          Prévia: os jogadores não veem esta cena.
-          <button onClick={onLeavePreview}>Voltar à cena ativa</button>
+        <div className={`map-preview ${hasInitiativeBar ? "has-init" : ""}`} role="status">
+          <Icon name="eye" size={16} color={GM} />
+          Prévia: os jogadores não veem esta cena
+          <Button size="sm" onClick={onLeavePreview}>
+            Voltar à cena ativa
+          </Button>
         </div>
       )}
     </div>

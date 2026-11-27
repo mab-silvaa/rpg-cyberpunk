@@ -1,6 +1,16 @@
 import { useRef } from "react";
 import type Konva from "konva";
-import { Circle, Group, Image as KonvaImage, Rect, Text } from "react-konva";
+import {
+  Circle,
+  Group,
+  Image as KonvaImage,
+  Label,
+  Line,
+  Rect,
+  RegularPolygon,
+  Tag,
+  Text,
+} from "react-konva";
 import {
   initials,
   snapToGrid,
@@ -12,36 +22,59 @@ import { useImage } from "./useImage";
 
 const EMIT_INTERVAL_MS = 1000 / TOKEN_MOVE_PER_SECOND;
 
+// Constantes do canvas, direto do sistema de design (prancha 03 · Mapa).
+const BG = "#07080d";
+const TEXT = "#e8ecf8";
+const ACCENT = "#22e5ff";
+const GM = "#ff4fa8";
+const TURN = "#ffc61a";
+const OK = "#3ddc97";
+const DANGER = "#ff5c6c";
+const SURFACE_3 = "#1c2234";
+const RADIUS_PER_SQUARE = 0.42;
+const MIN_RADIUS_PX = 11;
+const MIN_TOUCH_PX = 44;
+
 interface Props {
   token: TokenView;
   gridPx: number;
   map: { width: number; height: number };
-  /** Escala atual do mapa, para o rótulo manter o tamanho na tela. */
+  /** Escala atual do mapa, para o rótulo e as linhas manterem o tamanho na tela. */
   scale: number;
   /** Pode arrastar agora (dono ou mestre, com a ferramenta de mover). */
   draggable: boolean;
-  mine: boolean;
+  /** É a vez deste token na iniciativa. */
+  turn: boolean;
   selected: boolean;
   onSelect: () => void;
   onMove: (move: TokenMove) => void;
 }
 
+const hexPoints = (r: number): number[] =>
+  Array.from({ length: 6 }, (_, i) => {
+    const a = Math.PI / 6 + (i * Math.PI) / 3;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  }).flat();
+
+/** Jogador = círculo, NPC (sem dono) = hexágono; oculto = traço magenta. */
 export function TokenShape({
   token,
   gridPx,
   map,
   scale,
   draggable,
-  mine,
+  turn,
   selected,
   onSelect,
   onMove,
 }: Props) {
   const image = useImage(token.imageUrl);
   const lastEmit = useRef(0);
-  const r = (token.size * gridPx) / 2;
+  const r = Math.max(token.size * gridPx * RADIUS_PER_SQUARE, MIN_RADIUS_PX / scale);
+  const npc = token.ownerId === null;
+  const px = 1 / scale;
 
-  // Recorta o centro quadrado da imagem, para ela preencher o círculo sem esticar.
+  // Recorta o centro quadrado da imagem, para ela preencher a forma sem esticar.
   const crop = image
     ? (() => {
         const side = Math.min(image.naturalWidth, image.naturalHeight);
@@ -65,13 +98,24 @@ export function TokenShape({
     return pos;
   }
 
+  const body = npc ? (
+    <RegularPolygon sides={6} radius={r} rotation={0} fill={token.color} />
+  ) : (
+    <Circle radius={r} fill={token.color} />
+  );
+  const outline = {
+    stroke: token.hidden ? GM : BG,
+    strokeWidth: 2 * px,
+    dash: token.hidden ? [4 * px, 3 * px] : undefined,
+  };
+  const hexPts = hexPoints(r);
+
   return (
     <Group
       name="token"
       x={token.x}
       y={token.y}
       draggable={draggable}
-      opacity={token.hidden ? 0.5 : 1}
       onClick={onSelect}
       onTap={onSelect}
       onDragStart={onSelect}
@@ -89,16 +133,45 @@ export function TokenShape({
         onMove({ id: token.id, x: pos.x, y: pos.y, final: true });
       }}
     >
-      <Circle radius={r} fill={token.color} />
-      {image ? (
-        <Group
-          clipFunc={(ctx) => {
-            ctx.arc(0, 0, r, 0, Math.PI * 2, false);
-          }}
-        >
-          <KonvaImage image={image} crop={crop} x={-r} y={-r} width={2 * r} height={2 * r} />
-        </Group>
-      ) : (
+      {/* Área de toque: no mínimo 44 px em volta do token */}
+      <Circle radius={Math.max(r, MIN_TOUCH_PX / 2 / scale)} fill="rgba(0,0,0,0.001)" />
+      {turn && (
+        <>
+          <Circle radius={r + 8 * px} stroke={TURN} strokeWidth={3 * px} listening={false} />
+          <Line
+            points={[
+              -7 * px,
+              -(r + 8 * px) - 14 * px,
+              7 * px,
+              -(r + 8 * px) - 14 * px,
+              0,
+              -(r + 8 * px) - 5 * px,
+            ]}
+            closed
+            fill={TURN}
+            listening={false}
+          />
+        </>
+      )}
+      <Group opacity={token.hidden ? 0.35 : 1}>
+        {body}
+        {image && (
+          <Group
+            clipFunc={(ctx) => {
+              if (npc) {
+                ctx.moveTo(hexPts[0]!, hexPts[1]!);
+                for (let i = 2; i < hexPts.length; i += 2) ctx.lineTo(hexPts[i]!, hexPts[i + 1]!);
+                ctx.closePath();
+              } else {
+                ctx.arc(0, 0, r, 0, Math.PI * 2, false);
+              }
+            }}
+          >
+            <KonvaImage image={image} crop={crop} x={-r} y={-r} width={2 * r} height={2 * r} />
+          </Group>
+        )}
+      </Group>
+      {!image && (
         <Text
           text={initials(token.name)}
           x={-r}
@@ -107,42 +180,61 @@ export function TokenShape({
           height={2 * r}
           align="center"
           verticalAlign="middle"
-          fontSize={r * 0.8}
+          fontFamily="Chakra Petch, sans-serif"
+          fontSize={r * 0.85}
           fontStyle="bold"
-          fill="#0b0d14"
+          fill={BG}
+          opacity={token.hidden ? 0.6 : 1}
           listening={false}
         />
       )}
-      <Circle
-        radius={r}
-        stroke={selected ? "#ffffff" : mine ? "#f5e90a" : token.color}
-        strokeWidth={selected ? 4 : mine ? 3 : 2}
-        strokeScaleEnabled={false}
-        dash={token.hidden ? [8, 6] : undefined}
-      />
-      {token.hp && token.hp.max > 0 && (
-        <HpBar hp={token.hp} width={Math.max(2 * r, 40 / scale)} y={-r - 9 / scale} scale={scale} />
+      {npc ? (
+        <Line points={hexPts} closed listening={false} {...outline} />
+      ) : (
+        <Circle radius={r} listening={false} {...outline} />
       )}
-      <Text
-        text={token.name}
-        width={200}
-        offsetX={100}
-        y={r + 3 / scale}
-        scaleX={1 / scale}
-        scaleY={1 / scale}
-        align="center"
-        fontSize={12}
-        fill="#e6e9f2"
-        shadowColor="#000"
-        shadowBlur={4}
-        shadowOpacity={1}
-        listening={false}
-      />
+      {selected && <Corners r={r + 4 * px} px={px} />}
+      {token.hp && token.hp.max > 0 && (
+        <HpBar hp={token.hp} width={Math.max(2 * r, 40 * px)} y={-r - 9 * px} scale={scale} />
+      )}
+      <Label x={0} y={r + 4 * px} scaleX={px} scaleY={px} listening={false}>
+        <Tag fill="rgba(7,8,13,0.85)" />
+        <Text
+          text={token.name}
+          fontFamily="JetBrains Mono, monospace"
+          fontStyle="600"
+          fontSize={11}
+          fill={TEXT}
+          padding={3}
+        />
+      </Label>
     </Group>
   );
 }
 
-/** Barra de HP acima do token: verde, amarela abaixo da metade, vermelha com HP zero. */
+/** Seleção: quatro cantos de 7 px, 2 px, ciano. */
+function Corners({ r, px }: { r: number; px: number }) {
+  const len = 7 * px;
+  const c = (sx: number, sy: number) => (
+    <Line
+      key={`${sx}${sy}`}
+      points={[sx * r, sy * (r - len), sx * r, sy * r, sx * (r - len), sy * r]}
+      stroke={ACCENT}
+      strokeWidth={2 * px}
+      listening={false}
+    />
+  );
+  return (
+    <>
+      {c(-1, -1)}
+      {c(1, -1)}
+      {c(1, 1)}
+      {c(-1, 1)}
+    </>
+  );
+}
+
+/** Barra de HP acima do token: verde, âmbar abaixo da metade, vermelha com HP zero. */
 function HpBar({
   hp,
   width,
@@ -155,11 +247,11 @@ function HpBar({
   scale: number;
 }) {
   const ratio = Math.min(1, Math.max(0, hp.current / hp.max));
-  const color = hp.current <= 0 ? "#ff5c7a" : ratio <= 0.5 ? "#f5c542" : "#37d67a";
-  const height = 6 / scale;
+  const color = hp.current <= 0 ? DANGER : ratio <= 0.5 ? TURN : OK;
+  const height = 4 / scale;
   return (
     <Group listening={false} x={-width / 2} y={y}>
-      <Rect width={width} height={height} fill="#0b0d14" stroke="#000" strokeWidth={1 / scale} />
+      <Rect width={width} height={height} fill={SURFACE_3} stroke={BG} strokeWidth={1 / scale} />
       <Rect width={width * ratio} height={height} fill={color} />
     </Group>
   );

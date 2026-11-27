@@ -1,6 +1,19 @@
 import { useState, type FormEvent } from "react";
 import { GRID_PX_MAX, GRID_PX_MIN, SCENE_NAME_MAX_LENGTH, type SceneSummary } from "@vtt/shared";
 import { api } from "./api";
+import {
+  Badge,
+  Button,
+  CheckField,
+  ErrorText,
+  Field,
+  MoreMenu,
+  Panel,
+  Stepper,
+  TextField,
+  ToolButton,
+  useConfirm,
+} from "./ui";
 
 interface Props {
   scenes: SceneSummary[];
@@ -55,71 +68,55 @@ function SceneForm({
   }
 
   return (
-    <form className="scene-form" onSubmit={(e) => void submit(e)}>
-      <label>
-        Nome da cena
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={SCENE_NAME_MAX_LENGTH}
-          required
-        />
-      </label>
-      <label>
-        {initial ? "Trocar a imagem do mapa" : "Imagem do mapa"} (PNG, JPG ou WebP)
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      <div className="row">
-        <label>
-          Quadrado (px)
-          <input
-            type="number"
+    <form className="form sub-form" onSubmit={(e) => void submit(e)}>
+      <TextField
+        label="Nome da cena"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={SCENE_NAME_MAX_LENGTH}
+        required
+      />
+      <TextField
+        label={`${initial ? "Trocar a imagem do mapa" : "Imagem do mapa"} (PNG, JPG ou WebP)`}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
+      <div className="form-row">
+        <Field label="Quadrado (px)" group>
+          <Stepper
+            label="Quadrado (px)"
             min={GRID_PX_MIN}
             max={GRID_PX_MAX}
-            step={1}
             value={gridPx}
-            onChange={(e) => setGridPx(Number(e.target.value))}
-            required
+            onChange={setGridPx}
           />
-        </label>
-        <label>
-          Metros por quadrado
-          <input
-            type="number"
+        </Field>
+        <Field label="Metros por quadrado" group>
+          <Stepper
+            label="Metros por quadrado"
             min={0.1}
             max={1000}
-            step={0.1}
+            step={0.5}
             value={meters}
-            onChange={(e) => setMeters(Number(e.target.value))}
-            required
+            onChange={(n) => setMeters(Math.round(n * 10) / 10)}
           />
-        </label>
+        </Field>
       </div>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={gridVisible}
-          onChange={(e) => setGridVisible(e.target.checked)}
-        />
-        Mostrar o grid
-      </label>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="row">
-        <button type="submit" disabled={busy}>
+      <CheckField
+        label="Mostrar o grid"
+        checked={gridVisible}
+        onChange={(e) => setGridVisible(e.target.checked)}
+      />
+      <ErrorText>{error}</ErrorText>
+      <div className="actions">
+        <Button type="submit" variant="primary" disabled={busy}>
           {busy ? "Salvando..." : submitLabel}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" className="link" onClick={onCancel}>
+          <Button variant="ghost" onClick={onCancel}>
             Cancelar
-          </button>
+          </Button>
         )}
       </div>
     </form>
@@ -127,7 +124,9 @@ function SceneForm({
 }
 
 export function ScenesPanel({ scenes, onScenes, previewId, onPreview }: Props) {
+  const confirm = useConfirm();
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
 
   async function run(action: () => Promise<SceneSummary[]>) {
@@ -153,55 +152,61 @@ export function ScenesPanel({ scenes, onScenes, previewId, onPreview }: Props) {
     };
     onScenes(id === null ? await api.createScene(input) : await api.updateScene(id, input));
     if (id !== null) setEditingId(null);
+    else setCreating(false);
+  }
+
+  async function remove(scene: SceneSummary) {
+    const ok = await confirm({
+      title: `Excluir "${scene.name}"?`,
+      message: "A cena e a imagem do mapa são apagadas. Os tokens dela também.",
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (ok) void run(() => api.deleteScene(scene.id));
   }
 
   return (
-    <>
-      <h3>Cenas</h3>
+    <Panel title="Cenas" gm count={scenes.length}>
       {scenes.length === 0 && (
         <p className="details">Nenhuma cena ainda. Crie a primeira abaixo.</p>
       )}
-      <ul className="scenes">
+      <ul className="list">
         {scenes.map((scene) => (
           <li key={scene.id}>
-            <div className="scene-line">
-              <span>
-                {scene.name}
-                {scene.isActive && <strong className="badge">ativa</strong>}
-                {previewId === scene.id && <strong className="badge preview">prévia</strong>}
+            <div className="row">
+              <span className="row-name">
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{scene.name}</span>
+                {scene.isActive && <Badge tone="ok">Ativa</Badge>}
+                {previewId === scene.id && <Badge tone="gm">Prévia</Badge>}
               </span>
-              <span className="actions">
-                {!scene.isActive && (
-                  <button
-                    className="link"
-                    onClick={() => void run(() => api.activateScene(scene.id))}
-                  >
-                    Ativar
-                  </button>
-                )}
-                <button
-                  className="link"
-                  onClick={() => onPreview(previewId === scene.id ? null : scene.id)}
-                >
-                  {previewId === scene.id ? "Fechar prévia" : "Ver"}
-                </button>
-                <button
-                  className="link"
-                  onClick={() => setEditingId(editingId === scene.id ? null : scene.id)}
-                >
-                  Editar
-                </button>
-                <button
-                  className="link danger"
-                  onClick={() => {
-                    if (window.confirm(`Excluir a cena "${scene.name}" e a imagem dela?`)) {
-                      void run(() => api.deleteScene(scene.id));
-                    }
-                  }}
-                >
-                  Excluir
-                </button>
-              </span>
+              {!scene.isActive && (
+                <Button size="sm" onClick={() => void run(() => api.activateScene(scene.id))}>
+                  Ativar
+                </Button>
+              )}
+              <ToolButton
+                icon="eye"
+                label={previewId === scene.id ? "Fechar prévia" : `Ver prévia de ${scene.name}`}
+                pressed={previewId === scene.id}
+                gm
+                onClick={() => onPreview(previewId === scene.id ? null : scene.id)}
+              />
+              <MoreMenu
+                label={`Mais ações de ${scene.name}`}
+                items={[
+                  {
+                    label: "Editar",
+                    icon: "note",
+                    onSelect: () => setEditingId(editingId === scene.id ? null : scene.id),
+                  },
+                  {
+                    label: "Excluir",
+                    icon: "trash",
+                    danger: true,
+                    onSelect: () => void remove(scene),
+                  },
+                ]}
+              />
             </div>
             {editingId === scene.id && (
               <SceneForm
@@ -214,16 +219,20 @@ export function ScenesPanel({ scenes, onScenes, previewId, onPreview }: Props) {
           </li>
         ))}
       </ul>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
+      <ErrorText>{error}</ErrorText>
+      {creating ? (
+        <SceneForm
+          submitLabel="Criar cena"
+          onSubmit={(values) => save(null, values)}
+          onCancel={() => setCreating(false)}
+        />
+      ) : (
+        <div className="actions">
+          <Button icon="plus" onClick={() => setCreating(true)}>
+            Nova cena
+          </Button>
+        </div>
       )}
-
-      <details className="new-scene">
-        <summary>Nova cena</summary>
-        <SceneForm submitLabel="Criar cena" onSubmit={(values) => save(null, values)} />
-      </details>
-    </>
+    </Panel>
   );
 }

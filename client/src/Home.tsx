@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
-  APP_NAME,
   type CharacterData,
   type CharacterReply,
   type CharacterView,
   type ClientToServerEvents,
+  maxHp,
   type FogState,
   type InitiativeView,
   type PresenceUser,
@@ -19,14 +19,18 @@ import {
   type ServerToClientEvents,
   type TokenMove,
   type TokenView,
+  type TunnelInfo,
   type User,
 } from "@vtt/shared";
 import { api } from "./api";
-import { CharactersPanel } from "./CharactersPanel";
-import { DicePanel } from "./DicePanel";
-import { InitiativeList } from "./InitiativePanel";
+import { DiceBar, useDice } from "./DicePanel";
 import { GmPanel } from "./GmPanel";
+import { Icon } from "./icons";
+import { InitiativeBar } from "./InitiativePanel";
 import { MapView } from "./MapView";
+import { PLAYER_TABS, PlayerContent, PlayerTabs, type PlayerTab } from "./PlayerPanel";
+import { Vital } from "./CharacterSheet";
+import { Alert, Badge, Button, IconButton, useToast } from "./ui";
 
 /** Celular em pé: tela estreita, onde mexer no mapa seria impreciso. */
 function useNarrowScreen(): boolean {
@@ -65,6 +69,9 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   // Só o mestre: lista de cenas e a cena que ele está olhando em prévia.
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [previewId, setPreviewId] = useState<number | null>(null);
+  const [playerTab, setPlayerTab] = useState<PlayerTab>(narrow ? "mapa" : "dados");
+  const [tunnel, setTunnel] = useState<TunnelInfo>();
+  const { toast, show } = useToast();
 
   useEffect(() => {
     const s: VttSocket = io();
@@ -204,97 +211,266 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   }
 
-  return (
-    <main className="home">
-      <header>
-        <h1>{APP_NAME}</h1>
-        <div className="who">
-          <span className={`status status-${status}`} role="status">
-            {status}
-          </span>
-          <span>
-            {user.name}
-            {user.isGm ? " (mestre)" : ""}
-          </span>
-          <button className="link" onClick={() => void leave()}>
-            Sair
-          </button>
+  useEffect(() => {
+    if (!user.isGm) return;
+    void api
+      .tunnel()
+      .then(setTunnel, () => setTunnel({ url: null, error: "Falha ao ler o tunnel" }));
+  }, [user.isGm]);
+
+  async function copyLink() {
+    if (!tunnel?.url) return;
+    try {
+      await navigator.clipboard.writeText(tunnel.url);
+      show("Link copiado. Cole no Discord.");
+    } catch {
+      show("Não consegui copiar. Selecione o link e copie à mão.");
+    }
+  }
+
+  const dice = useDice(rollDice, user.isGm);
+
+  const outsideActive = preview !== undefined && preview.id !== activeScene?.id;
+  const activeEntry = initiative.entries.find((e) => e.id === initiative.activeId);
+  const turnTokenId = activeEntry?.tokenId ?? null;
+  const myCharacter = characters.find((c) => c.ownerId === user.id);
+  const isMyTurn =
+    !user.isGm &&
+    activeEntry !== undefined &&
+    ((turnTokenId !== null && tokens.some((t) => t.id === turnTokenId && t.ownerId === user.id)) ||
+      activeEntry.name === user.name ||
+      (myCharacter !== undefined && activeEntry.name === myCharacter.data.handle));
+  const hasInitiative = initiative.entries.length > 0 || initiative.round > 0;
+
+  const connection = (
+    <span
+      className={`conn ${status === "conectado" ? "ok" : status === "desconectado" ? "lost" : "wait"}`}
+      role="status"
+    >
+      {status === "conectado" ? (
+        <span className="dot" aria-hidden="true" />
+      ) : (
+        <Icon name={status === "desconectado" ? "alert" : "refresh"} size={14} />
+      )}
+      {status === "conectado"
+        ? "Conectado"
+        : status === "desconectado"
+          ? "Sem conexão"
+          : "Reconectando"}
+    </span>
+  );
+
+  const map = (
+    <MapView
+      viewOnly={narrow}
+      scene={shown}
+      preview={outsideActive}
+      // Na prévia as réguas da cena ativa não fazem sentido, e a régua do mestre não deve vazar.
+      rulers={outsideActive ? [] : rulers}
+      isGm={user.isGm}
+      selfId={user.id}
+      tokens={shownTokens}
+      fog={shownFog}
+      onFogShape={(shape) => {
+        if (shown) void api.addFogShape(shown.id, shape).catch(() => undefined);
+      }}
+      selectedTokenId={selectedTokenId}
+      onSelectToken={user.isGm ? setSelectedTokenId : noSelect}
+      onMoveToken={sendTokenMove}
+      onRuler={outsideActive ? noRuler : sendRuler}
+      onLeavePreview={() => setPreviewId(null)}
+      turnTokenId={turnTokenId}
+      hasInitiativeBar={hasInitiative && !narrow}
+    />
+  );
+
+  const playerProps = {
+    user,
+    players,
+    characters,
+    initiative,
+    rolls,
+    dice,
+    onSaveCharacter: saveCharacter,
+    onRoll: rollDice,
+    onCharacterCreated: addCharacter,
+    onCharacterRemoved: removeCharacter,
+  };
+
+  // Celular do jogador: mapa em cima, conteúdo no meio, quatro destinos embaixo.
+  if (narrow && !user.isGm) {
+    return (
+      <div className="m-table">
+        <header className="m-top">
+          <span className="logo-mark" />
+          <h1 className="logo-name">Salandra</h1>
+          <span className="grow" />
+          {connection}
+          <IconButton
+            icon="logout"
+            label="Sair"
+            variant="ghost"
+            size="sm"
+            onClick={() => void leave()}
+          />
+        </header>
+        {status === "desconectado" && <Alert tone="danger">Conexão perdida. Reconectando…</Alert>}
+        {isMyTurn && (
+          <div className="turn-strip" role="status">
+            <Icon name="play" size={18} />
+            Sua vez, {user.name}
+            <span className="mono">RODADA {initiative.round}</span>
+          </div>
+        )}
+        <div className="m-map">{map}</div>
+        {myCharacter && (
+          <div className="m-vitals">
+            <div style={{ width: 56 }}>
+              <div className="t-label" style={{ fontSize: 10, letterSpacing: "0.14em" }}>
+                {(myCharacter.data.handle || "ficha").toUpperCase()}
+              </div>
+              <div className="t-block" style={{ fontSize: 15, lineHeight: "18px" }}>
+                Ficha
+              </div>
+            </div>
+            <Vital
+              icon="heart"
+              label="HP"
+              value={myCharacter.data.hpCurrent}
+              max={maxHp(myCharacter.data)}
+              tone="ok"
+            />
+            <Vital
+              icon="shield"
+              label="SP"
+              value={myCharacter.data.bodySp}
+              max={myCharacter.data.bodySpMax}
+              tone="accent"
+            />
+          </div>
+        )}
+        <div className="m-content" role="tabpanel">
+          <PlayerContent {...playerProps} tab={playerTab} mobile />
         </div>
+        <nav className="m-nav" aria-label="Mesa">
+          {PLAYER_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              className="tab"
+              aria-selected={playerTab === t.key}
+              onClick={() => setPlayerTab(t.key)}
+            >
+              <Icon name={t.icon} size={22} />
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        {toast}
+      </div>
+    );
+  }
+
+  return (
+    <div className="table">
+      <header className="topbar">
+        <div className="logo">
+          <span className="logo-mark" />
+          <h1 className="logo-name">Salandra</h1>
+        </div>
+        <span className="sep" />
+        <div className="scene-name">
+          <Icon name="map" size={18} />
+          <span>
+            {shown ? `${shown.name} · ${shown.metersPerSquare} m por quadrado` : "Sem cena"}
+          </span>
+        </div>
+        {connection}
+        <span className="grow" />
+        {user.isGm && tunnel?.url && (
+          <Button variant="ghost" size="sm" icon="copy" onClick={() => void copyLink()}>
+            Copiar link
+          </Button>
+        )}
+        {user.isGm ? (
+          <Badge tone="gm" icon="lock">
+            Mestre
+          </Badge>
+        ) : (
+          <Badge tone="accent">Jogador</Badge>
+        )}
+        <span className="who">{user.name}</span>
+        <IconButton
+          icon="logout"
+          label="Sair"
+          variant="ghost"
+          size="sm"
+          onClick={() => void leave()}
+        />
       </header>
 
       {status === "desconectado" && (
-        <div className="banner" role="alert">
-          Conexão perdida. Reconectando... (o mapa volta ao estado atual assim que reconectar)
+        <div style={{ padding: "8px 16px" }}>
+          <Alert tone="danger">
+            Conexão perdida. Reconectando… O mapa volta ao estado atual assim que reconectar.
+          </Alert>
         </div>
       )}
 
-      <MapView
-        viewOnly={narrow}
-        scene={shown}
-        preview={preview !== undefined && preview.id !== activeScene?.id}
-        // Na prévia as réguas da cena ativa não fazem sentido, e a régua do mestre não deve vazar.
-        rulers={preview && preview.id !== activeScene?.id ? [] : rulers}
-        isGm={user.isGm}
-        selfId={user.id}
-        tokens={shownTokens}
-        fog={shownFog}
-        onFogShape={(shape) => {
-          if (shown) void api.addFogShape(shown.id, shape).catch(() => undefined);
-        }}
-        selectedTokenId={selectedTokenId}
-        onSelectToken={user.isGm ? setSelectedTokenId : noSelect}
-        onMoveToken={sendTokenMove}
-        onRuler={preview && preview.id !== activeScene?.id ? noRuler : sendRuler}
-        onLeavePreview={() => setPreviewId(null)}
-      />
-
-      {!user.isGm && <InitiativeList initiative={initiative} />}
-
-      <DicePanel rolls={rolls} isGm={user.isGm} onRoll={rollDice} />
-
-      <CharactersPanel
-        user={user}
-        characters={characters}
-        players={players}
-        onSave={saveCharacter}
-        onRoll={rollDice}
-        onCreated={addCharacter}
-        onRemoved={removeCharacter}
-      />
-
-      <section className="card">
-        <h2>Na mesa</h2>
-        <ul className="players">
-          {players.map((p) => (
-            <li key={p.id} className={p.online ? "online" : "offline"}>
-              {p.name}
-              {p.isGm ? " (mestre)" : ""}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {user.isGm && (
-        <GmPanel
-          self={user}
-          players={players}
-          scenes={scenes}
-          onScenes={setScenes}
-          previewId={previewId}
-          onPreview={setPreviewId}
-          shownScene={shown}
-          tokens={shownTokens}
-          characters={characters}
-          onCharacterCreated={addCharacter}
-          initiative={initiative}
-          fog={shownFog}
-          selectedTokenId={selectedTokenId}
-          onSelectToken={setSelectedTokenId}
-          onTokenChange={changeToken}
-          onTokenRemove={removeToken}
-        />
-      )}
-    </main>
+      <div className="body">
+        <div className="stage">
+          {map}
+          <InitiativeBar initiative={initiative} isGm={user.isGm} />
+          {!narrow && <DiceBar dice={dice} isGm={user.isGm} last={rolls.at(-1)} />}
+        </div>
+        <aside className="side" aria-label={user.isGm ? "Painel do mestre" : "Painel do jogador"}>
+          {user.isGm ? (
+            <GmPanel
+              self={user}
+              players={players}
+              scenes={scenes}
+              onScenes={setScenes}
+              previewId={previewId}
+              onPreview={setPreviewId}
+              shownScene={shown}
+              tokens={shownTokens}
+              fog={shownFog}
+              characters={characters}
+              onCharacterCreated={addCharacter}
+              onCharacterRemoved={removeCharacter}
+              onSaveCharacter={saveCharacter}
+              onRoll={rollDice}
+              rolls={rolls}
+              dice={dice}
+              initiative={initiative}
+              selectedTokenId={selectedTokenId}
+              onSelectToken={setSelectedTokenId}
+              onTokenChange={changeToken}
+              onTokenRemove={removeToken}
+              tunnel={tunnel}
+              onCopyLink={() => void copyLink()}
+            />
+          ) : (
+            <>
+              <PlayerTabs
+                active={playerTab === "mapa" ? "dados" : playerTab}
+                onChange={setPlayerTab}
+                tabs={PLAYER_TABS.filter((t) => t.key !== "mapa")}
+              />
+              <div className="side-scroll" role="tabpanel">
+                <PlayerContent
+                  {...playerProps}
+                  tab={playerTab === "mapa" ? "dados" : playerTab}
+                  mobile={false}
+                />
+              </div>
+            </>
+          )}
+        </aside>
+      </div>
+      {toast}
+    </div>
   );
 }
 

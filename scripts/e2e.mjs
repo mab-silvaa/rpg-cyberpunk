@@ -126,9 +126,11 @@ try {
   const users = await api(gm, "GET", "/api/users");
   const ana = users.find((u) => u.name === "Ana");
   check(ana, "jogador Ana aparece na lista");
+  await gm.getByRole("tab", { name: "Mesa" }).click();
   await gm.locator("ul.players li.online", { hasText: "Ana" }).first().waitFor();
 
   log("Mestre sem backup vê o aviso de backup");
+  await gm.getByRole("tab", { name: "Cena" }).click();
   await gm.getByText("ainda não fez nenhum backup").waitFor();
 
   log("Mestre cria cena com mapa enviado e a ativa");
@@ -200,28 +202,25 @@ try {
   shown.socket.close();
 
   log("Jogador rola 2d6+3 pela tela e o mestre vê o resultado");
-  await player.getByLabel("Rolagem").fill("2d6+3");
+  await player.getByLabel("Expressão de dados").fill("2d6+3");
   await player.getByRole("button", { name: "Rolar", exact: true }).click();
+  await gm.getByRole("tab", { name: "Mesa" }).click();
   await gm.getByLabel("Histórico de rolagens").getByText("Ana").first().waitFor();
   await player.getByLabel("Histórico de rolagens").getByText("Ana").first().waitFor();
 
   log("Rolagem secreta do mestre não aparece para o jogador");
-  await gm.getByLabel("Rolagem").fill("1d20");
-  await gm
-    .getByLabel("Rolagem")
-    .locator("xpath=ancestor::form")
-    .getByLabel(/secreta/i)
-    .check();
-  await gm.getByRole("button", { name: "Rolar", exact: true }).click();
+  await gm.getByLabel("Expressão de dados").fill("1d20");
+  await gm.getByRole("button", { name: /Rolar em segredo/ }).click();
   await gm.locator(".roll.secret").first().waitFor();
   await sleep(400);
   check((await player.locator(".roll.secret").count()) === 0, "jogador não viu rolagem secreta");
 
   log("Jogador cria a ficha, edita o handle e o mestre vê a ficha");
+  await player.getByRole("tab", { name: "Ficha" }).click();
   await player.getByRole("button", { name: "Criar minha ficha" }).click();
   await player.getByLabel("Handle").fill("Zeta");
   await player.getByText(/salvo/i).first().waitFor();
-  await gm.getByRole("button", { name: "Zeta" }).waitFor();
+  await gm.getByRole("button", { name: "Zeta", exact: true }).waitFor();
 
   log("Painel do mestre: nota privada nunca chega ao jogador");
   const note = await gm.request.post(`${BASE}/api/notes`, {
