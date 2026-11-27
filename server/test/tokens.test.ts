@@ -101,6 +101,7 @@ describe("criar e editar tokens", () => {
       imageUrl: null,
       ownerId: null,
       hidden: false,
+      hostile: false,
     });
     expect((await createToken({}, rita)).status).toBe(403);
     const patch = await api(server, "PATCH", `/api/tokens/${res.body.id}`, {
@@ -123,6 +124,7 @@ describe("criar e editar tokens", () => {
       { x: "10" },
       { x: 1e9 },
       { hidden: "sim" },
+      { hostile: "sim" },
       { ownerId: 999 },
       { imageId: 999 },
       { sceneId: 999 },
@@ -131,6 +133,17 @@ describe("criar e editar tokens", () => {
       expect(res.status, JSON.stringify(body)).toBe(400);
     }
     expect((await createToken({ sceneId: undefined })).status).toBe(400);
+  });
+
+  it("marca e desmarca o token como hostil", async () => {
+    const created = await createToken({ hostile: true });
+    expect(created.status).toBe(201);
+    expect(created.body.hostile).toBe(true);
+    const patched = await api<TokenView>(server, "PATCH", `/api/tokens/${created.body.id}`, {
+      cookie: gm,
+      body: { hostile: false },
+    });
+    expect(patched.body.hostile).toBe(false);
   });
 
   it("mantém o centro dentro do mapa", async () => {

@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { GRID_PX_MAX, GRID_PX_MIN, SCENE_NAME_MAX_LENGTH, type SceneSummary } from "@vtt/shared";
+import {
+  GRID_PX_MAX,
+  GRID_PX_MIN,
+  SCENE_NAME_MAX_LENGTH,
+  type ImageInfo,
+  type SceneSummary,
+} from "@vtt/shared";
 import { api } from "./api";
+import { FileDrop } from "./FileDrop";
 import {
   Badge,
   Button,
@@ -27,7 +34,7 @@ interface FormValues {
   gridPx: number;
   metersPerSquare: number;
   gridVisible: boolean;
-  file: File | null;
+  image: ImageInfo | null | undefined;
 }
 
 function SceneForm({
@@ -45,7 +52,8 @@ function SceneForm({
   const [gridPx, setGridPx] = useState(initial?.gridPx ?? 70);
   const [meters, setMeters] = useState(initial?.metersPerSquare ?? 2);
   const [gridVisible, setGridVisible] = useState(initial?.gridVisible ?? true);
-  const [file, setFile] = useState<File | null>(null);
+  const [image, setImage] = useState<ImageInfo | null | undefined>(undefined);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -54,11 +62,10 @@ function SceneForm({
     setBusy(true);
     setError(undefined);
     try {
-      await onSubmit({ name, gridPx, metersPerSquare: meters, gridVisible, file });
+      await onSubmit({ name, gridPx, metersPerSquare: meters, gridVisible, image });
       if (!initial) {
         setName("");
-        setFile(null);
-        (event.target as HTMLFormElement).reset();
+        setImage(undefined);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Algo deu errado");
@@ -76,11 +83,14 @@ function SceneForm({
         maxLength={SCENE_NAME_MAX_LENGTH}
         required
       />
-      <TextField
-        label={`${initial ? "Trocar a imagem do mapa" : "Imagem do mapa"} (PNG, JPG ou WebP)`}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      <FileDrop
+        key={initial ? `s${initial.id}` : "new"}
+        kind="map"
+        title="Enviar imagem do mapa"
+        currentUrl={initial?.imageUrl ?? null}
+        replaceText="A imagem substitui a atual desta cena."
+        onChange={setImage}
+        onBusy={setUploading}
       />
       <div className="form-row">
         <Field label="Quadrado (px)" group>
@@ -110,7 +120,7 @@ function SceneForm({
       />
       <ErrorText>{error}</ErrorText>
       <div className="actions">
-        <Button type="submit" variant="primary" disabled={busy}>
+        <Button type="submit" variant="primary" disabled={busy || uploading}>
           {busy ? "Salvando..." : submitLabel}
         </Button>
         {onCancel && (
@@ -142,7 +152,7 @@ export function ScenesPanel({ scenes, onScenes, previewId, onPreview }: Props) {
   }
 
   async function save(id: number | null, values: FormValues) {
-    const imageId = values.file ? (await api.uploadImage(values.file)).id : undefined;
+    const imageId = values.image === undefined ? undefined : (values.image?.id ?? null);
     const input = {
       name: values.name,
       gridPx: values.gridPx,

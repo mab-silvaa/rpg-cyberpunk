@@ -8,6 +8,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
+  type Ref,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
@@ -144,17 +145,20 @@ export function Badge({
 interface FieldProps {
   label: string;
   error?: string;
+  /** Texto de apoio abaixo do campo (some quando há erro). */
+  hint?: string;
   /** Campo com vários botões (como o número com − e +): rótulo não pode ser um <label>. */
   group?: boolean;
   children: ReactNode;
 }
 
 /** Rótulo acima, campo de 44 px, erro com ícone e texto. */
-export function Field({ label, error, group, children }: FieldProps) {
+export function Field({ label, error, hint, group, children }: FieldProps) {
   const inner = (
     <>
       <span className="t-label">{label}</span>
       {children}
+      {hint && !error && <span className="field-hint">{hint}</span>}
       {error && (
         <span className="field-msg" role="alert">
           <Icon name="alert" size={14} />
@@ -175,17 +179,21 @@ export function Field({ label, error, group, children }: FieldProps) {
 export function TextField({
   label,
   error,
+  hint,
   mono,
+  ref,
   ...rest
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "className"> & {
+  ref?: Ref<HTMLInputElement>;
   label: string;
   error?: string;
+  hint?: string;
   mono?: boolean;
 }) {
   return (
-    <Field label={label} error={error}>
+    <Field label={label} error={error} hint={hint}>
       <span className={`control ${mono ? "mono" : ""}`}>
-        <input {...rest} />
+        <input ref={ref} {...rest} />
       </span>
     </Field>
   );
@@ -426,7 +434,16 @@ export interface MenuItem {
 }
 
 /** Menu "mais": ações pouco frequentes, com o perigo separado e em vermelho. */
-export function MoreMenu({ label, items }: { label: string; items: MenuItem[] }) {
+export function MoreMenu({
+  label,
+  items,
+  triggerText,
+}: {
+  label: string;
+  items: MenuItem[];
+  /** Em vez do botão "mais", mostra este texto com uma seta (menu do usuário). */
+  triggerText?: string;
+}) {
   const [pos, setPos] = useState<{ right: number; top?: number; bottom?: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -481,13 +498,28 @@ export function MoreMenu({ label, items }: { label: string; items: MenuItem[] })
   };
   return (
     <div className="menu-wrap" ref={wrapRef}>
-      <ToolButton
-        icon="more"
-        label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={toggle}
-      />
+      {triggerText ? (
+        <button
+          type="button"
+          className="user-trigger"
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          <Icon name="user" size={18} />
+          <span>{triggerText}</span>
+          <Icon name="chevd" size={16} />
+        </button>
+      ) : (
+        <ToolButton
+          icon="more"
+          label={label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={toggle}
+        />
+      )}
       {pos &&
         createPortal(
           <div className="menu" role="menu" ref={menuRef} style={pos}>

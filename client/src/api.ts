@@ -42,6 +42,36 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return data;
 }
 
+/** Envio com progresso e cancelamento (o fetch não informa o andamento do envio). */
+export function uploadImageWithProgress(
+  file: File,
+  onProgress: (percent: number) => void,
+): { promise: Promise<ImageInfo>; cancel: () => void } {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<ImageInfo>((resolve, reject) => {
+    xhr.open("POST", "/api/images");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data: Partial<ApiError> & Partial<ImageInfo> = {};
+      try {
+        data = JSON.parse(xhr.responseText) as typeof data;
+      } catch {
+        /* resposta sem JSON */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data as ImageInfo);
+      else reject(new ApiFailure(data.error ?? "Algo deu errado", xhr.status));
+    };
+    xhr.onerror = () => reject(new ApiFailure("Sem conexão com o servidor", 0));
+    xhr.onabort = () => reject(new ApiFailure("Envio cancelado", 0));
+    const form = new FormData();
+    form.append("file", file);
+    xhr.send(form);
+  });
+  return { promise, cancel: () => xhr.abort() };
+}
+
 export const api = {
   me: () => request<LoginResponse>("GET", "/api/me").then((r) => r.user),
   login: (body: LoginRequest) =>

@@ -1698,3 +1698,234 @@ code {
     top: 44px;
   }
 }
+
+/* Envio de imagem (prancha 13) */
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  text-align: center;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1.5px dashed var(--line-control);
+  font: inherit;
+  max-width: 100%;
+  transition:
+    border-color var(--motion),
+    background var(--motion);
+}
+.drop.map {
+  width: 310px;
+  height: 220px;
+}
+.drop.token {
+  width: 150px;
+  height: 150px;
+  gap: 8px;
+}
+.drop.is-zone {
+  cursor: pointer;
+}
+.drop.is-zone:hover,
+.drop.is-zone.is-over {
+  border-color: var(--accent);
+}
+.drop.is-zone.is-over {
+  background: rgba(34, 229, 255, 0.08);
+  color: var(--accent);
+}
+.drop.is-zone:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.drop-title {
+  font: 600 15px/20px var(--font-body);
+  color: var(--text);
+}
+.drop-title.accent {
+  font-size: 16px;
+  color: var(--accent);
+}
+.drop.token .drop-title {
+  font-size: 13px;
+}
+.drop-hint {
+  font: 400 13px/18px var(--font-body);
+  color: var(--text-muted);
+}
+.drop-fmt {
+  font: 500 11.5px/16px var(--font-body);
+  color: var(--text-dim);
+}
+.drop-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font: 600 12px/1 var(--font-body);
+}
+.only-mobile {
+  display: none;
+}
+.drop.is-busy,
+.drop.is-ready,
+.drop.is-error {
+  border-style: solid;
+  border-color: var(--line-control);
+  align-items: stretch;
+  gap: 12px;
+}
+.drop.is-error {
+  border-color: var(--danger);
+  align-items: center;
+  color: var(--danger);
+}
+.drop.is-error .drop-hint {
+  color: var(--text-muted);
+}
+.drop.is-disabled {
+  border-color: var(--line);
+  color: var(--disabled-fg);
+  background: var(--surface-1);
+  cursor: not-allowed;
+}
+.drop.is-disabled .drop-title,
+.drop.is-disabled .drop-hint {
+  color: var(--disabled-fg);
+}
+.drop-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.drop-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.drop-name {
+  font: 600 13px/18px var(--font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drop-pct {
+  font: 600 13px/1 var(--font-mono);
+  color: var(--accent);
+}
+.drop-bar {
+  height: 4px;
+  background: var(--surface-3);
+}
+.drop-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.drop-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 12px/16px var(--font-body);
+  color: var(--ok);
+}
+.drop-preview {
+  display: block;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  background: var(--surface-3);
+  align-self: center;
+}
+.drop.map .drop-preview {
+  width: 100%;
+  height: 90px;
+}
+.drop-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.drop-preview.circle {
+  border-radius: 50%;
+}
+.drop-preview.hex {
+  clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+}
+@media (max-width: 700px) {
+  .only-pc {
+    display: none;
+  }
+  .only-mobile {
+    display: inline;
+  }
+  .drop.map {
+    width: 100%;
+  }
+  .drop-cta {
+    height: 52px;
+  }
+}
+
+/* Renomear (prancha 09) */
+.field-hint {
+  font: 400 12px/17px var(--font-body);
+  color: var(--text-dim);
+}
+.user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 500 14px/20px var(--font-body);
+  cursor: pointer;
+}
+.user-trigger:hover {
+  color: var(--accent-hover);
+}
+.user-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.inline-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.inline-rename .control {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .scrim.sheet {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .scrim.sheet .dialog-box {
+    width: 100%;
+  }
+  .scrim.sheet .btn {
+    height: 52px;
+  }
+  .scrim.sheet .dialog-actions {
+    flex-direction: column-reverse;
+  }
+  .scrim.sheet .dialog-actions .btn-wrap,
+  .scrim.sheet .dialog-actions .btn {
+    width: 100%;
+  }
+}

@@ -201,8 +201,11 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     res.json(presenceList());
   });
 
-  app.patch("/api/users/:id", requireGm, (req, res) => {
+  // O mestre renomeia qualquer um; cada jogador renomeia só a si mesmo.
+  app.patch("/api/users/:id", requireUser, (req, res) => {
     const id = Number(req.params.id);
+    const self = res.locals.user as User;
+    if (!self.isGm && id !== self.id) return fail(res, 403, "Só o mestre faz isso");
     const name = normalizeName((req.body as { name?: unknown } | undefined)?.name);
     if (!users.byId(id)) return fail(res, 404, "Usuário não encontrado");
     if (!name) return fail(res, 400, "Digite um nome de 1 a 32 caracteres");

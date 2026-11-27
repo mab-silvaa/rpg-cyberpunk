@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type Konva from "konva";
 import {
   Circle,
@@ -18,7 +18,7 @@ import {
   type TokenMove,
   type TokenView,
 } from "@vtt/shared";
-import { useImage } from "./useImage";
+import { useImageState } from "./useImage";
 
 const EMIT_INTERVAL_MS = 1000 / TOKEN_MOVE_PER_SECOND;
 
@@ -31,6 +31,8 @@ const TURN = "#ffc61a";
 const OK = "#3ddc97";
 const DANGER = "#ff5c6c";
 const SURFACE_3 = "#1c2234";
+const TEXT_DIM = "#a3acc7";
+const HOSTILE_RING_GAP = 4;
 const RADIUS_PER_SQUARE = 0.42;
 const MIN_RADIUS_PX = 11;
 const MIN_TOUCH_PX = 44;
@@ -68,11 +70,15 @@ export function TokenShape({
   onSelect,
   onMove,
 }: Props) {
-  const image = useImage(token.imageUrl);
+  const { image, failed } = useImageState(token.imageUrl);
+  const [hover, setHover] = useState(false);
   const lastEmit = useRef(0);
   const r = Math.max(token.size * gridPx * RADIUS_PER_SQUARE, MIN_RADIUS_PX / scale);
   const npc = token.ownerId === null;
   const px = 1 / scale;
+  // Derrotado: só para hostis, derivado do HP em zero (o design não define um campo próprio).
+  const defeated = token.hostile && token.hp !== null && token.hp.max > 0 && token.hp.current <= 0;
+  const canDrag = draggable && !defeated;
 
   // Recorta o centro quadrado da imagem, para ela preencher a forma sem esticar.
   const crop = image
@@ -99,15 +105,22 @@ export function TokenShape({
   }
 
   const body = npc ? (
-    <RegularPolygon sides={6} radius={r} rotation={0} fill={token.color} />
+    <RegularPolygon sides={6} radius={r} rotation={0} fill={defeated ? SURFACE_3 : token.color} />
   ) : (
-    <Circle radius={r} fill={token.color} />
+    <Circle radius={r} fill={defeated ? SURFACE_3 : token.color} />
   );
   const outline = {
-    stroke: token.hidden ? GM : BG,
+    stroke: token.hidden ? GM : defeated ? TEXT_DIM : failed ? TURN : BG,
     strokeWidth: 2 * px,
-    dash: token.hidden ? [4 * px, 3 * px] : undefined,
+    dash: token.hidden
+      ? [4 * px, 3 * px]
+      : defeated
+        ? [4 * px, 3 * px]
+        : failed
+          ? [5 * px, 3 * px]
+          : undefined,
   };
+  const ringR = r + HOSTILE_RING_GAP * px;
   const hexPts = hexPoints(r);
 
   return (
@@ -115,7 +128,9 @@ export function TokenShape({
       name="token"
       x={token.x}
       y={token.y}
-      draggable={draggable}
+      draggable={canDrag}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       onClick={onSelect}
       onTap={onSelect}
       onDragStart={onSelect}
@@ -135,6 +150,24 @@ export function TokenShape({
     >
       {/* Área de toque: no mínimo 44 px em volta do token */}
       <Circle radius={Math.max(r, MIN_TOUCH_PX / 2 / scale)} fill="rgba(0,0,0,0.001)" />
+      {token.hostile && hover && canDrag && (
+        <Circle
+          radius={ringR + 4 * px}
+          stroke={DANGER}
+          strokeWidth={8 * px}
+          opacity={0.35}
+          listening={false}
+        />
+      )}
+      {token.hostile && (
+        <Circle
+          radius={ringR}
+          stroke={defeated ? TEXT_DIM : DANGER}
+          strokeWidth={2 * px}
+          dash={defeated ? [4 * px, 3 * px] : undefined}
+          listening={false}
+        />
+      )}
       {turn && (
         <>
           <Circle radius={r + 8 * px} stroke={TURN} strokeWidth={3 * px} listening={false} />
@@ -171,7 +204,7 @@ export function TokenShape({
           </Group>
         )}
       </Group>
-      {!image && (
+      {!image && !failed && !defeated && (
         <Text
           text={initials(token.name)}
           x={-r}
@@ -188,26 +221,76 @@ export function TokenShape({
           listening={false}
         />
       )}
+      {defeated && (
+        <>
+          <Line
+            points={[-r * 0.45, -r * 0.45, r * 0.45, r * 0.45]}
+            stroke={TEXT_DIM}
+            strokeWidth={2 * px}
+            listening={false}
+          />
+          <Line
+            points={[r * 0.45, -r * 0.45, -r * 0.45, r * 0.45]}
+            stroke={TEXT_DIM}
+            strokeWidth={2 * px}
+            listening={false}
+          />
+        </>
+      )}
+      {failed && (
+        <>
+          <Circle
+            x={r * 0.7}
+            y={-r * 0.7}
+            radius={Math.max(6 * px, r * 0.3)}
+            fill={TURN}
+            listening={false}
+          />
+          <Text
+            text="!"
+            x={r * 0.7 - 6 * px}
+            y={-r * 0.7 - 6 * px}
+            width={12 * px}
+            height={12 * px}
+            align="center"
+            verticalAlign="middle"
+            fontFamily="Chakra Petch, sans-serif"
+            fontStyle="bold"
+            fontSize={11 * px}
+            fill={BG}
+            listening={false}
+          />
+        </>
+      )}
       {npc ? (
         <Line points={hexPts} closed listening={false} {...outline} />
       ) : (
         <Circle radius={r} listening={false} {...outline} />
       )}
-      {selected && <Corners r={r + 4 * px} px={px} />}
+      {selected && <Corners r={(token.hostile ? ringR : r) + 4 * px} px={px} />}
       {token.hp && token.hp.max > 0 && (
         <HpBar hp={token.hp} width={Math.max(2 * r, 40 * px)} y={-r - 9 * px} scale={scale} />
       )}
-      <Label x={0} y={r + 4 * px} scaleX={px} scaleY={px} listening={false}>
-        <Tag fill="rgba(7,8,13,0.85)" />
-        <Text
-          text={token.name}
-          fontFamily="JetBrains Mono, monospace"
-          fontStyle="600"
-          fontSize={11}
-          fill={TEXT}
-          padding={3}
-        />
-      </Label>
+      {scale >= 1 && (
+        <Label
+          x={0}
+          y={(token.hostile ? ringR : r) + 4 * px}
+          scaleX={px}
+          scaleY={px}
+          listening={false}
+        >
+          <Tag fill="rgba(7,8,13,0.85)" />
+          <Text
+            text={token.name}
+            textDecoration={defeated ? "line-through" : ""}
+            fontFamily="JetBrains Mono, monospace"
+            fontStyle="600"
+            fontSize={11}
+            fill={TEXT}
+            padding={3}
+          />
+        </Label>
+      )}
     </Group>
   );
 }

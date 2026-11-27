@@ -30,7 +30,8 @@ import { InitiativeBar } from "./InitiativePanel";
 import { MapView } from "./MapView";
 import { PLAYER_TABS, PlayerContent, PlayerTabs, type PlayerTab } from "./PlayerPanel";
 import { Vital } from "./CharacterSheet";
-import { Alert, Badge, Button, IconButton, useToast } from "./ui";
+import { RenameDialog } from "./Rename";
+import { Alert, Badge, Button, IconButton, MoreMenu, useToast, type MenuItem } from "./ui";
 
 /** Celular em pé: tela estreita, onde mexer no mapa seria impreciso. */
 function useNarrowScreen(): boolean {
@@ -48,10 +49,18 @@ function useNarrowScreen(): boolean {
 type Status = "conectando" | "conectado" | "desconectado";
 type VttSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
+export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: () => void }) {
   const [status, setStatus] = useState<Status>("conectando");
   const narrow = useNarrowScreen();
   const [players, setPlayers] = useState<PresenceUser[]>([]);
+  const [renaming, setRenaming] = useState(false);
+  // O nome muda ao vivo pela lista de presença (renomeio próprio ou feito pelo mestre).
+  const liveName = players.find((p) => p.id === sessionUser.id)?.name;
+  const user = useMemo<User>(
+    () =>
+      liveName && liveName !== sessionUser.name ? { ...sessionUser, name: liveName } : sessionUser,
+    [sessionUser, liveName],
+  );
   const socketRef = useRef<VttSocket>(null);
   const [activeScene, setActiveScene] = useState<SceneView | null>(null);
   const [rulers, setRulers] = useState<RulerState[]>([]);
@@ -211,6 +220,18 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   }
 
+  const userMenu: MenuItem[] = [
+    { label: "Mudar meu nome", icon: "note", onSelect: () => setRenaming(true) },
+    { label: "Sair", icon: "logout", danger: true, onSelect: () => void leave() },
+  ];
+  const renameDialog = renaming ? (
+    <RenameDialog
+      name={user.name}
+      onSave={async (name) => void (await api.rename(user.id, name))}
+      onClose={() => setRenaming(false)}
+    />
+  ) : null;
+
   useEffect(() => {
     if (!user.isGm) return;
     void api
@@ -306,13 +327,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           <h1 className="logo-name">Salandra</h1>
           <span className="grow" />
           {connection}
-          <IconButton
-            icon="logout"
-            label="Sair"
-            variant="ghost"
-            size="sm"
-            onClick={() => void leave()}
-          />
+          <MoreMenu label="Menu do usuário" triggerText={user.name} items={userMenu} />
         </header>
         {status === "desconectado" && <Alert tone="danger">Conexão perdida. Reconectando…</Alert>}
         {isMyTurn && (
@@ -368,6 +383,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
           ))}
         </nav>
         {toast}
+        {renameDialog}
       </div>
     );
   }
@@ -400,14 +416,22 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         ) : (
           <Badge tone="accent">Jogador</Badge>
         )}
-        <span className="who">{user.name}</span>
-        <IconButton
-          icon="logout"
-          label="Sair"
-          variant="ghost"
-          size="sm"
-          onClick={() => void leave()}
-        />
+        {user.isGm ? (
+          <>
+            <span className="who">{user.name}</span>
+            <IconButton
+              icon="logout"
+              label="Sair"
+              variant="ghost"
+              size="sm"
+              onClick={() => void leave()}
+            />
+          </>
+        ) : (
+          <span className="who">
+            <MoreMenu label="Menu do usuário" triggerText={user.name} items={userMenu} />
+          </span>
+        )}
       </header>
 
       {status === "desconectado" && (
@@ -470,6 +494,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         </aside>
       </div>
       {toast}
+      {renameDialog}
     </div>
   );
 }

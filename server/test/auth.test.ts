@@ -97,6 +97,27 @@ describe("login do mestre", () => {
 });
 
 describe("administração de usuários", () => {
+  it("cada jogador renomeia só a si mesmo", async () => {
+    const rita = await loginPlayer("Rita");
+    const bruno = await loginPlayer("Bruno");
+    const own = await api<PresenceUser[]>(server, "PATCH", `/api/users/${rita.body.user.id}`, {
+      cookie: rita.cookie,
+      body: { name: "Rita V" },
+    });
+    expect(own.status).toBe(200);
+    expect(own.body.map((u) => u.name)).toContain("Rita V");
+    const clash = await api(server, "PATCH", `/api/users/${rita.body.user.id}`, {
+      cookie: rita.cookie,
+      body: { name: "bruno" },
+    });
+    expect(clash.status).toBe(409);
+    const other = await api(server, "PATCH", `/api/users/${bruno.body.user.id}`, {
+      cookie: rita.cookie,
+      body: { name: "Outro" },
+    });
+    expect(other.status).toBe(403);
+  });
+
   it("só o mestre renomeia e expulsa", async () => {
     const gm = await loginGm();
     const rita = await loginPlayer("Rita");

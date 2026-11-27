@@ -31,13 +31,14 @@ interface TokenRow {
   image_id: number | null;
   owner_id: number | null;
   hidden: number;
+  hostile: number;
   character_id: number | null;
   filename: string | null;
   char_data: string | null;
 }
 
 const SELECT = `
-  SELECT t.id, t.scene_id, t.name, t.x, t.y, t.size, t.color, t.image_id, t.owner_id, t.hidden,
+  SELECT t.id, t.scene_id, t.name, t.x, t.y, t.size, t.color, t.image_id, t.owner_id, t.hidden, t.hostile,
          t.character_id, i.filename, c.data AS char_data
   FROM tokens t
   LEFT JOIN images i ON i.id = t.image_id
@@ -54,6 +55,7 @@ const toView = (row: TokenRow): TokenView => ({
   imageUrl: row.filename ? imageUrl(row.filename) : null,
   ownerId: row.owner_id,
   hidden: row.hidden === 1,
+  hostile: row.hostile === 1,
   characterId: row.character_id,
   hp: row.char_data ? hpOf(JSON.parse(row.char_data) as CharacterData) : null,
 });
@@ -134,6 +136,11 @@ export function parseTokenInput(body: unknown, creating: boolean): ParseResult {
     if (typeof raw.hidden !== "boolean")
       return { ok: false, error: "hidden deve ser verdadeiro ou falso" };
     value.hidden = raw.hidden;
+  }
+  if (raw.hostile !== undefined) {
+    if (typeof raw.hostile !== "boolean")
+      return { ok: false, error: "hostile deve ser verdadeiro ou falso" };
+    value.hostile = raw.hostile;
   }
   return { ok: true, value };
 }
@@ -219,8 +226,8 @@ export class Tokens {
     const y = input.y ?? (scene.imageHeight ?? 1400) / 2;
     const result = this.db
       .prepare(
-        `INSERT INTO tokens (scene_id, name, x, y, size, color, image_id, owner_id, hidden, character_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tokens (scene_id, name, x, y, size, color, image_id, owner_id, hidden, hostile, character_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         scene.id,
@@ -232,6 +239,7 @@ export class Tokens {
         input.imageId ?? null,
         input.ownerId ?? null,
         input.hidden ? 1 : 0,
+        input.hostile ? 1 : 0,
         input.characterId ?? null,
       );
     return this.byId(Number(result.lastInsertRowid))!;
@@ -248,7 +256,7 @@ export class Tokens {
     const previousImage = this.imageIdOf(id);
     this.db
       .prepare(
-        `UPDATE tokens SET name = ?, x = ?, y = ?, size = ?, color = ?, image_id = ?, owner_id = ?, hidden = ?,
+        `UPDATE tokens SET name = ?, x = ?, y = ?, size = ?, color = ?, image_id = ?, owner_id = ?, hidden = ?, hostile = ?,
          character_id = ? WHERE id = ?`,
       )
       .run(
@@ -260,6 +268,7 @@ export class Tokens {
         input.imageId === undefined ? previousImage : input.imageId,
         input.ownerId === undefined ? current.ownerId : input.ownerId,
         (input.hidden ?? current.hidden) ? 1 : 0,
+        (input.hostile ?? current.hostile) ? 1 : 0,
         input.characterId === undefined ? current.characterId : input.characterId,
         id,
       );

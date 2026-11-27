@@ -4,12 +4,14 @@ import {
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
   type CharacterView,
+  type ImageInfo,
   type PresenceUser,
   type SceneView,
   type TokenInput,
   type TokenView,
 } from "@vtt/shared";
 import { api } from "./api";
+import { FileDrop } from "./FileDrop";
 import { Icon } from "./icons";
 import {
   Badge,
@@ -43,8 +45,9 @@ interface FormValues {
   ownerId: number | null;
   characterId: number | null;
   hidden: boolean;
-  file: File | null;
-  removeImage: boolean;
+  hostile: boolean;
+  /** undefined = não mexeu; null = removeu; senão a imagem enviada. */
+  image: ImageInfo | null | undefined;
 }
 
 /** As oito cores de dono de token do sistema de design (luminosidades diferentes). */
@@ -108,8 +111,9 @@ function TokenForm({
   const [ownerId, setOwnerId] = useState<number | null>(initial?.ownerId ?? null);
   const [characterId, setCharacterId] = useState<number | null>(initial?.characterId ?? null);
   const [hidden, setHidden] = useState(initial?.hidden ?? false);
-  const [file, setFile] = useState<File | null>(null);
-  const [removeImage, setRemoveImage] = useState(false);
+  const [hostile, setHostile] = useState(initial?.hostile ?? false);
+  const [image, setImage] = useState<ImageInfo | null | undefined>(undefined);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -118,11 +122,11 @@ function TokenForm({
     setBusy(true);
     setError(undefined);
     try {
-      await onSubmit({ name, size, color, ownerId, characterId, hidden, file, removeImage });
+      await onSubmit({ name, size, color, ownerId, characterId, hidden, hostile, image });
       if (!initial) {
         setName("");
-        setFile(null);
-        (event.target as HTMLFormElement).reset();
+        setImage(undefined);
+        setHostile(false);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Algo deu errado");
@@ -178,19 +182,20 @@ function TokenForm({
           </option>
         ))}
       </SelectField>
-      <TextField
-        label={`${initial?.imageUrl ? "Trocar a imagem" : "Imagem (opcional)"} (PNG, JPG ou WebP)`}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      <FileDrop
+        key={initial ? `t${initial.id}` : "new"}
+        kind="token"
+        title="Imagem do token"
+        currentUrl={initial?.imageUrl ?? null}
+        shape={ownerId === null ? "hex" : "circle"}
+        onChange={setImage}
+        onBusy={setUploading}
       />
-      {initial?.imageUrl && !file && (
-        <CheckField
-          label="Remover a imagem (volta a mostrar as iniciais)"
-          checked={removeImage}
-          onChange={(e) => setRemoveImage(e.target.checked)}
-        />
-      )}
+      <CheckField
+        label="Hostil (inimigo)"
+        checked={hostile}
+        onChange={(e) => setHostile(e.target.checked)}
+      />
       <CheckField
         label="Escondido dos jogadores"
         gm
@@ -199,7 +204,7 @@ function TokenForm({
       />
       <ErrorText>{error}</ErrorText>
       <div className="actions">
-        <Button type="submit" variant="primary" disabled={busy}>
+        <Button type="submit" variant="primary" disabled={busy || uploading}>
           {busy ? "Salvando..." : submitLabel}
         </Button>
         {onCancel && (
@@ -228,11 +233,7 @@ export function TokensPanel({
   const [error, setError] = useState<string>();
 
   async function save(id: number | null, values: FormValues) {
-    const imageId = values.file
-      ? (await api.uploadImage(values.file)).id
-      : values.removeImage
-        ? null
-        : undefined;
+    const imageId = values.image === undefined ? undefined : (values.image?.id ?? null);
     const input: TokenInput = {
       name: values.name,
       size: values.size,
@@ -240,6 +241,7 @@ export function TokensPanel({
       ownerId: values.ownerId,
       characterId: values.characterId,
       hidden: values.hidden,
+      hostile: values.hostile,
       ...(imageId !== undefined ? { imageId } : {}),
     };
     if (id === null) {

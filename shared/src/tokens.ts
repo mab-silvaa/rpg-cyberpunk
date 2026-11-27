@@ -14,6 +14,8 @@ export interface TokenView {
   ownerId: number | null;
   /** Escondido dos jogadores. Quem não é mestre nunca recebe um token oculto. */
   hidden: boolean;
+  /** Inimigo: o mapa desenha um anel vermelho em volta do token. */
+  hostile: boolean;
   /** Ficha ligada ao token (para o mestre; o jogador só vê o HP). */
   characterId: number | null;
   /** HP da ficha ligada. Jogadores só recebem o HP de fichas que têm dono (personagens). */
@@ -31,6 +33,7 @@ export interface TokenInput {
   imageId?: number | null;
   ownerId?: number | null;
   hidden?: boolean;
+  hostile?: boolean;
   characterId?: number | null;
 }
 
