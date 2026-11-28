@@ -15,7 +15,7 @@ O visual segue o sistema de design Salandra · Neon Grid. Veja [docs/design-syst
 
 - Fase 2: cenas com imagem de fundo enviada pelo mestre, grid configurável, zoom, pan, régua (os outros veem a régua em tempo real) e prévia de cenas no painel do mestre
 
-- Fase 3: tokens (nome, tamanho, cor, imagem opcional, dono, oculto) que o mestre cria no painel; quem é dono move o próprio token, com encaixe no grid (segure Shift para soltar livre) e os outros veem em tempo real
+- Fase 3: tokens (nome, tamanho, cor, imagem opcional, dono, oculto, hostil) que o mestre cria no painel; quem é dono move o próprio token, com encaixe no grid (segure Shift para soltar livre) e os outros veem em tempo real
 
 - Fase 4: fog of war por cena (guardada como lista de formas: retângulo e pincel, revelar ou cobrir, com desfazer, cobrir tudo e revelar tudo). O servidor não envia aos jogadores os tokens que estão sob fog
 

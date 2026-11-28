@@ -28,7 +28,14 @@ import { GmPanel } from "./GmPanel";
 import { Icon } from "./icons";
 import { InitiativeBar } from "./InitiativePanel";
 import { MapView } from "./MapView";
-import { PLAYER_TABS, PlayerContent, PlayerTabs, type PlayerTab } from "./PlayerPanel";
+import {
+  PLAYER_TABS,
+  PLAYER_TABS_PC,
+  PlayerContent,
+  PlayerTabs,
+  type PlayerTab,
+} from "./PlayerPanel";
+import { useUnseen } from "./useUnseen";
 import { Vital } from "./CharacterSheet";
 import { RenameDialog } from "./Rename";
 import { Alert, Badge, Button, IconButton, MoreMenu, useToast, type MenuItem } from "./ui";
@@ -78,7 +85,7 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
   // Só o mestre: lista de cenas e a cena que ele está olhando em prévia.
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [previewId, setPreviewId] = useState<number | null>(null);
-  const [playerTab, setPlayerTab] = useState<PlayerTab>(narrow ? "mapa" : "dados");
+  const [playerTab, setPlayerTab] = useState<PlayerTab>(narrow ? "mapa" : "ficha");
   const [tunnel, setTunnel] = useState<TunnelInfo>();
   const { toast, show } = useToast();
 
@@ -305,12 +312,20 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
     />
   );
 
+  // PC: só Ficha e Histórico; o estado compartilhado com o celular cai em Ficha.
+  const pcTab: PlayerTab = playerTab === "historico" ? "historico" : "ficha";
+  const unseenRolls = useUnseen(rolls, pcTab === "historico");
+  const lastRoll = user.isGm
+    ? rolls.at(-1)
+    : [...rolls].reverse().find((r) => r.userId === user.id);
+
   const playerProps = {
     user,
     players,
     characters,
     initiative,
     rolls,
+    loading: status === "conectando",
     dice,
     onSaveCharacter: saveCharacter,
     onRoll: rollDice,
@@ -446,7 +461,7 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
         <div className="stage">
           {map}
           <InitiativeBar initiative={initiative} isGm={user.isGm} />
-          {!narrow && <DiceBar dice={dice} isGm={user.isGm} last={rolls.at(-1)} />}
+          {!narrow && <DiceBar dice={dice} isGm={user.isGm} last={lastRoll} />}
         </div>
         <aside className="side" aria-label={user.isGm ? "Painel do mestre" : "Painel do jogador"}>
           {user.isGm ? (
@@ -478,16 +493,13 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
           ) : (
             <>
               <PlayerTabs
-                active={playerTab === "mapa" ? "dados" : playerTab}
+                active={pcTab}
                 onChange={setPlayerTab}
-                tabs={PLAYER_TABS.filter((t) => t.key !== "mapa")}
+                tabs={PLAYER_TABS_PC}
+                counts={{ historico: unseenRolls }}
               />
               <div className="side-scroll" role="tabpanel">
-                <PlayerContent
-                  {...playerProps}
-                  tab={playerTab === "mapa" ? "dados" : playerTab}
-                  mobile={false}
-                />
+                <PlayerContent {...playerProps} tab={pcTab} mobile={false} />
               </div>
             </>
           )}

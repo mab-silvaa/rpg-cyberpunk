@@ -302,6 +302,7 @@ export function TokensPanel({
                 )}
                 {ownerName(token) && <Badge tone="accent">{ownerName(token)}</Badge>}
                 {token.ownerId === null && <Badge>NPC</Badge>}
+                {token.hostile && <Badge tone="danger">Hostil</Badge>}
               </span>
               <MoreMenu
                 label={`Mais ações de ${token.name}`}

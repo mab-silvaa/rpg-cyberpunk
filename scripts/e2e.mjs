@@ -204,8 +204,9 @@ try {
   log("Jogador rola 2d6+3 pela tela e o mestre vê o resultado");
   await player.getByLabel("Expressão de dados").fill("2d6+3");
   await player.getByRole("button", { name: "Rolar", exact: true }).click();
-  await gm.getByRole("tab", { name: "Mesa" }).click();
+  await gm.getByRole("tab", { name: "Histórico" }).click();
   await gm.getByLabel("Histórico de rolagens").getByText("Ana").first().waitFor();
+  await player.getByRole("tab", { name: "Histórico" }).click();
   await player.getByLabel("Histórico de rolagens").getByText("Ana").first().waitFor();
 
   log("Rolagem secreta do mestre não aparece para o jogador");
@@ -217,9 +218,11 @@ try {
 
   log("Jogador cria a ficha, edita o handle e o mestre vê a ficha");
   await player.getByRole("tab", { name: "Ficha" }).click();
-  await player.getByRole("button", { name: "Criar minha ficha" }).click();
+  await player.getByRole("button", { name: "Criar ficha" }).click();
+  await player.getByRole("button", { name: "Abrir ficha" }).click();
   await player.getByLabel("Handle").fill("Zeta");
   await player.getByText(/salvo/i).first().waitFor();
+  await gm.getByRole("tab", { name: "Fichas" }).click();
   await gm.getByRole("button", { name: "Zeta", exact: true }).waitFor();
 
   log("Painel do mestre: nota privada nunca chega ao jogador");

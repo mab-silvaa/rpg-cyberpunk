@@ -388,6 +388,9 @@ export interface TabItem<K extends string> {
   key: K;
   label: string;
   icon: IconName;
+  /** Contador de novidades (por exemplo, nova rolagem no histórico). */
+  count?: number;
+  disabled?: boolean;
 }
 
 /** Abas com ícone e rótulo. Magenta marca "só o mestre vê". */
@@ -397,6 +400,7 @@ export function Tabs<K extends string>({
   onChange,
   gm,
   row,
+  iconOnly,
   label,
 }: {
   tabs: TabItem<K>[];
@@ -405,6 +409,8 @@ export function Tabs<K extends string>({
   gm?: boolean;
   /** Abas em linha (ícone ao lado do rótulo), como nas abas da ficha. */
   row?: boolean;
+  /** Só o ícone (o mestre tem sete abas); o nome vai no título e no aria-label. */
+  iconOnly?: boolean;
   label: string;
 }) {
   return (
@@ -416,10 +422,18 @@ export function Tabs<K extends string>({
           role="tab"
           className="tab"
           aria-selected={active === t.key}
+          aria-label={iconOnly ? t.label : undefined}
+          title={iconOnly ? t.label : undefined}
+          disabled={t.disabled}
           onClick={() => onChange(t.key)}
         >
           <Icon name={t.icon} size={22} />
-          {t.label}
+          {!iconOnly && t.label}
+          {t.count !== undefined && t.count > 0 && (
+            <span className="tab-count" aria-label={`${t.count} novas`}>
+              {t.count}
+            </span>
+          )}
         </button>
       ))}
     </div>

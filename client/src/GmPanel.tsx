@@ -17,8 +17,7 @@ import type {
   User,
 } from "@vtt/shared";
 import { api } from "./api";
-import { CharactersPanel } from "./CharactersPanel";
-import { RollHistory, TestControls, type Dice } from "./DicePanel";
+import { type Dice } from "./DicePanel";
 import { FogPanel } from "./FogPanel";
 import { InitiativeControls } from "./InitiativePanel";
 import { NotesPanel } from "./NotesPanel";
@@ -26,7 +25,9 @@ import { NpcPanel } from "./NpcPanel";
 import { PlayersPanel } from "./PlayersPanel";
 import { ScenesPanel } from "./ScenesPanel";
 import { TokensPanel } from "./TokensPanel";
-import { Alert, Button, Panel, Tabs, type TabItem } from "./ui";
+import { GmSheetsPanel, HistoryPanel, SheetOverlay } from "./Summary";
+import { Alert, Button, ErrorText, Panel, Tabs, type TabItem } from "./ui";
+import { useUnseen } from "./useUnseen";
 
 interface Props {
   self: User;
@@ -54,13 +55,15 @@ interface Props {
   onCopyLink: () => void;
 }
 
-type GmTab = "cena" | "tokens" | "combate" | "notas" | "mesa";
+type GmTab = "cena" | "tokens" | "combate" | "notas" | "mesa" | "fichas" | "historico";
 const TABS: TabItem<GmTab>[] = [
   { key: "cena", label: "Cena", icon: "map" },
-  { key: "tokens", label: "Tokens", icon: "users" },
+  { key: "tokens", label: "Tokens", icon: "dice" },
   { key: "combate", label: "Combate", icon: "order" },
   { key: "notas", label: "Notas", icon: "note" },
-  { key: "mesa", label: "Mesa", icon: "user" },
+  { key: "mesa", label: "Mesa", icon: "users" },
+  { key: "fichas", label: "Fichas", icon: "sheet" },
+  { key: "historico", label: "Histórico", icon: "clock" },
 ];
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -71,6 +74,10 @@ export function GmPanel(props: Props) {
   const { self, tunnel } = props;
   const [tab, setTab] = useState<GmTab>("cena");
   const [backup, setBackup] = useState<BackupStatus>();
+  const [openSheetId, setOpenSheetId] = useState<number | null>(null);
+  const [sheetsError, setSheetsError] = useState<string>();
+  const unseenRolls = useUnseen(props.rolls, tab === "historico");
+  const openSheet = props.characters.find((c) => c.id === openSheetId);
 
   useEffect(() => {
     void api.backupStatus().then(setBackup, () => undefined);
@@ -78,7 +85,15 @@ export function GmPanel(props: Props) {
 
   return (
     <>
-      <Tabs tabs={TABS} active={tab} onChange={setTab} gm label="Painel do mestre" />
+      <Tabs
+        tabs={TABS.map((t) => (t.key === "historico" ? { ...t, count: unseenRolls } : t))}
+        active={tab}
+        onChange={setTab}
+        gm
+        iconOnly
+        label="Painel do mestre"
+      />
+      <h2 className="side-title">{TABS.find((t) => t.key === tab)?.label}</h2>
       <div className="side-scroll" role="tabpanel">
         {tab === "cena" && (
           <>
@@ -140,25 +155,41 @@ export function GmPanel(props: Props) {
           <InitiativeControls initiative={props.initiative} sceneTokens={props.tokens} />
         )}
         {tab === "notas" && <NotesPanel />}
-        {tab === "mesa" && (
+        {tab === "mesa" && <PlayersPanel self={self} players={props.players} />}
+        {tab === "fichas" && (
           <>
-            <PlayersPanel self={self} players={props.players} />
-            <CharactersPanel
-              user={self}
+            <GmSheetsPanel
               characters={props.characters}
               players={props.players}
-              onSave={props.onSaveCharacter}
-              onRoll={props.onRoll}
-              onCreated={props.onCharacterCreated}
+              onOpen={setOpenSheetId}
+              onCreated={(c) => {
+                props.onCharacterCreated(c);
+                setOpenSheetId(c.id);
+              }}
               onRemoved={props.onCharacterRemoved}
+              onError={setSheetsError}
             />
-            <Panel title="Rolagens" count={props.rolls.length}>
-              <TestControls dice={props.dice} isGm />
-              <RollHistory rolls={props.rolls} />
-            </Panel>
+            <ErrorText>{sheetsError}</ErrorText>
           </>
         )}
+        {tab === "historico" && <HistoryPanel rolls={props.rolls} selfId={self.id} isGm />}
       </div>
+      {openSheet && (
+        <SheetOverlay
+          character={openSheet}
+          players={props.players}
+          onAssign={(ownerId) =>
+            void api
+              .assignCharacter(openSheet.id, ownerId)
+              .catch((e: unknown) =>
+                setSheetsError(e instanceof Error ? e.message : "Algo deu errado"),
+              )
+          }
+          onSave={props.onSaveCharacter}
+          onRoll={props.onRoll}
+          onClose={() => setOpenSheetId(null)}
+        />
+      )}
     </>
   );
 }

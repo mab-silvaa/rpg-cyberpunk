@@ -30,13 +30,14 @@ import {
 } from "@vtt/shared";
 import { FogLayer } from "./FogLayer";
 import { TokenShape } from "./TokenShape";
-import { useImage } from "./useImage";
-import { fitView, zoomAt, type View } from "./view";
+import { useImageState } from "./useImage";
+import { fitView, zoomAt, zoomBy, type View } from "./view";
 import { Icon, type IconName } from "./icons";
 import { Button, ToolButton } from "./ui";
 
 const DEFAULT_MAP = { width: 2000, height: 1400 };
 const RULER_EMIT_INTERVAL_MS = 50;
+const MOBILE_MAX_ZOOM = 4;
 
 type Tool = "mover" | "regua" | "ret-revelar" | "ret-cobrir" | "pincel-revelar" | "pincel-cobrir";
 
@@ -165,7 +166,11 @@ export function MapView({
   const [brushPx, setBrushPx] = useState<number | null>(null);
   const lastEmit = useRef(0);
 
-  const image = useImage(scene?.imageUrl ?? null);
+  // "Tentar" (erro do mapa no celular) pede a imagem de novo.
+  const [attempt, setAttempt] = useState(0);
+  const { image, failed: imageFailed } = useImageState(
+    scene?.imageUrl ? `${scene.imageUrl}${attempt ? `?tentativa=${attempt}` : ""}` : null,
+  );
   const map = {
     width: scene?.imageWidth ?? DEFAULT_MAP.width,
     height: scene?.imageHeight ?? DEFAULT_MAP.height,
@@ -208,6 +213,41 @@ export function MapView({
   }, [rulerKey, onRuler]);
 
   const pointer = (stage: Konva.Stage) => stage.getRelativePointerPosition();
+
+  // Celular: zoom em níveis de ×1,5 a partir do mapa inteiro (100 %), até 400 %.
+  const fitScale = sized ? fitView(size, map).scale : 1;
+  const minScale = viewOnly ? fitScale : undefined;
+  const maxScale = viewOnly ? fitScale * MOBILE_MAX_ZOOM : undefined;
+  const relative = view.scale / fitScale;
+  const atMin = relative <= 1.005;
+  const atMax = relative >= MOBILE_MAX_ZOOM - 0.005;
+  const centre = { x: size.width / 2, y: size.height / 2 };
+  const step = (factor: number, at = centre) =>
+    setView((v) => zoomBy(v, at, factor, minScale, maxScale));
+
+  // Pinça com dois dedos: zoom contínuo ao redor do ponto médio.
+  const pinch = useRef<number | null>(null);
+  const onPinch = (e: Konva.KonvaEventObject<TouchEvent>): boolean => {
+    const touches = e.evt.touches;
+    if (touches.length !== 2) {
+      pinch.current = null;
+      return false;
+    }
+    e.evt.preventDefault();
+    const stage = e.target.getStage()!;
+    if (stage.isDragging()) stage.stopDrag();
+    const rect = stage.container().getBoundingClientRect();
+    const a = { x: touches[0]!.clientX - rect.left, y: touches[0]!.clientY - rect.top };
+    const b = { x: touches[1]!.clientX - rect.left, y: touches[1]!.clientY - rect.top };
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch.current && dist > 0) {
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const factor = dist / pinch.current;
+      setView((v) => zoomBy(v, mid, factor, minScale, maxScale));
+    }
+    pinch.current = dist;
+    return true;
+  };
 
   const fogOn = isGm && !viewOnly && fog?.enabled === true;
   const fogTool = fogOn ? fogToolInfo(tool) : null;
@@ -354,9 +394,18 @@ export function MapView({
           onMouseDown={startRuler}
           onTouchStart={startRuler}
           onMouseMove={moveRuler}
-          onTouchMove={moveRuler}
+          onTouchMove={(e) => {
+            if (!onPinch(e)) moveRuler(e);
+          }}
+          onDblTap={(e) => {
+            const p = e.target.getStage()?.getPointerPosition();
+            if (p) step(1.5, p);
+          }}
           onMouseUp={endRuler}
-          onTouchEnd={endRuler}
+          onTouchEnd={() => {
+            pinch.current = null;
+            endRuler();
+          }}
           onMouseLeave={endRuler}
         >
           <Layer>
@@ -485,34 +534,66 @@ export function MapView({
         </div>
       )}
       {viewOnly ? (
-        <div className="float map-view-only" style={{ left: 10, top: 10 }}>
-          <div
-            className="float-in"
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px", height: 24 }}
-          >
-            <Icon name="eye" size={14} />
-            <span className="t-label">Só visualização</span>
+        <>
+          <div className="m-zoom-chip" role="status">
+            <span className={atMin ? "dim" : ""}>
+              {atMin ? "MAPA INTEIRO" : `ZOOM ${Math.round(relative * 100)} %`}
+            </span>
           </div>
-        </div>
-      ) : null}
-      <div className="map-zoom">
-        {!viewOnly && (
+          <div className="m-zoom" role="group" aria-label="Zoom do mapa">
+            <button
+              type="button"
+              aria-label="Aproximar"
+              disabled={atMax || imageFailed}
+              onClick={() => step(1.5)}
+            >
+              <Icon name="plus" size={24} />
+            </button>
+            <hr />
+            <button
+              type="button"
+              aria-label="Afastar"
+              disabled={atMin || imageFailed}
+              onClick={() => step(1 / 1.5)}
+            >
+              <Icon name="minus" size={24} />
+            </button>
+            <hr className="strong" />
+            <button
+              type="button"
+              aria-label="Ajustar"
+              disabled={atMin || imageFailed}
+              onClick={() => setView(fitView(size, map))}
+            >
+              <Icon name="fit" size={24} />
+            </button>
+          </div>
+          {imageFailed && (
+            <div className="m-map-error" role="alert">
+              <Icon name="alert" size={18} color="var(--danger)" />
+              <span>O mapa não carregou.</span>
+              <Button size="sm" onClick={() => setAttempt((n) => n + 1)}>
+                Tentar
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="map-zoom">
           <ToolButton
             icon="minus"
             label="Afastar"
-            onClick={() => setView((v) => zoomAt(v, { x: size.width / 2, y: size.height / 2 }, -1))}
+            onClick={() => setView((v) => zoomAt(v, centre, -1))}
           />
-        )}
-        {!viewOnly && <span>{Math.round(view.scale * 100)}%</span>}
-        {!viewOnly && (
+          <span>{Math.round(view.scale * 100)}%</span>
           <ToolButton
             icon="plus"
             label="Aproximar"
-            onClick={() => setView((v) => zoomAt(v, { x: size.width / 2, y: size.height / 2 }, 1))}
+            onClick={() => setView((v) => zoomAt(v, centre, 1))}
           />
-        )}
-        <ToolButton icon="fit" label="Ajustar" onClick={() => setView(fitView(size, map))} />
-      </div>
+          <ToolButton icon="fit" label="Ajustar" onClick={() => setView(fitView(size, map))} />
+        </div>
+      )}
       {preview && (
         <div className={`map-preview ${hasInitiativeBar ? "has-init" : ""}`} role="status">
           <Icon name="eye" size={16} color={GM} />

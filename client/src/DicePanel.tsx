@@ -7,7 +7,7 @@ import {
   type TermResult,
 } from "@vtt/shared";
 import { Icon } from "./icons";
-import { Badge, Button, Card, CheckField, ErrorText, IconButton, Stepper, Field } from "./ui";
+import { Badge, Button, Card, ErrorText, IconButton } from "./ui";
 
 type OnRoll = (request: RollRequest) => Promise<RollReply>;
 
@@ -100,7 +100,7 @@ function RollBadges({ roll }: { roll: RollResult }) {
 }
 
 /** Cada rolagem é um cartão; o total é o protagonista, colorido pelo resultado. */
-function RollCard({ roll }: { roll: RollResult }) {
+export function RollCard({ roll }: { roll: RollResult }) {
   const { tone } = rollInfo(roll);
   const cardTone = roll.secret
     ? "gm"
@@ -136,24 +136,18 @@ function RollCard({ roll }: { roll: RollResult }) {
   );
 }
 
-/** Histórico completo, mais recente primeiro. */
-export function RollHistory({ rolls }: { rolls: RollResult[] }) {
-  if (rolls.length === 0) return <p className="details">Nenhuma rolagem ainda.</p>;
-  return (
-    <ul className="rolls" aria-label="Histórico de rolagens">
-      {[...rolls].reverse().map((roll) => (
-        <RollCard key={roll.id} roll={roll} />
-      ))}
-    </ul>
-  );
-}
-
 /** Última rolagem: fica fixa na barra do mapa e no topo da aba Dados. */
-export function LastRoll({ roll }: { roll: RollResult | undefined }) {
+export function LastRoll({
+  roll,
+  label = "Última rolagem",
+}: {
+  roll: RollResult | undefined;
+  label?: string;
+}) {
   if (!roll) {
     return (
       <div className="dice-last">
-        <span className="t-label">Última rolagem</span>
+        <span className="t-label">{label}</span>
         <span className="details">Nenhuma ainda.</span>
       </div>
     );
@@ -162,7 +156,7 @@ export function LastRoll({ roll }: { roll: RollResult | undefined }) {
   return (
     <div className="dice-last" aria-live="polite">
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span className="t-label">Última rolagem</span>
+        <span className="t-label">{label}</span>
         <span style={{ flex: 1 }} />
         <RollBadges roll={roll} />
       </div>
@@ -229,6 +223,7 @@ export function DiceBar({
 }: {
   dice: Dice;
   isGm: boolean;
+  /** Última rolagem: de todos para o mestre, só a do jogador para ele. */
   last: RollResult | undefined;
 }) {
   return (
@@ -245,85 +240,24 @@ export function DiceBar({
               </span>
             )}
           </div>
-          <LastRoll roll={last} />
+          <LastRoll roll={last} label={isGm ? "Última rolagem" : "SUA ÚLTIMA ROLAGEM"} />
         </div>
       </div>
     </div>
   );
 }
 
-/** Teste (1d10 explosivo + STAT e skill) e dano em d6. */
-export function TestControls({ dice, isGm }: { dice: Dice; isGm: boolean }) {
-  const [modifier, setModifier] = useState(0);
-  const [damageDice, setDamageDice] = useState(3);
-  const testExpression = `1d10!${modifier < 0 ? "-" : "+"}${Math.abs(modifier)}`;
-  return (
-    <div className="form">
-      <div className="form-row">
-        <Field label="Teste (STAT + skill)" group>
-          <Stepper
-            label="Modificador do teste"
-            value={modifier}
-            min={-100}
-            max={100}
-            onChange={(n) => setModifier(Math.trunc(n) || 0)}
-          />
-        </Field>
-        <Field label="Dano (d6)" group>
-          <Stepper
-            label="Quantidade de d6 de dano"
-            value={damageDice}
-            min={1}
-            max={20}
-            onChange={(n) => setDamageDice(Math.min(20, Math.max(1, Math.trunc(n) || 1)))}
-          />
-        </Field>
-      </div>
-      <Button
-        variant="primary"
-        size="lg"
-        block
-        icon="dice"
-        onClick={() => void dice.send(testExpression, "Teste")}
-      >
-        Teste {testExpression}
-      </Button>
-      <Button block onClick={() => void dice.send(`${damageDice}d6`, "Dano")}>
-        Dano {damageDice}d6
-      </Button>
-      {isGm && (
-        <CheckField
-          label="Rolagem secreta (só o mestre vê)"
-          gm
-          checked={dice.secret}
-          onChange={(e) => dice.setSecret(e.target.checked)}
-        />
-      )}
-      <p className="details">
-        No teste, um 10 natural soma outro d10 e um 1 natural subtrai outro d10. No dano, dois ou
-        mais 6 contam como crítico. Escreva também contas como 1d10!+8 ou 2d6+1d4−2.
-      </p>
-      <ErrorText>{dice.error}</ErrorText>
-    </div>
-  );
-}
-
-/** Dados completos, sem a barra do mapa (aba Dados). */
-export function DiceTab({ dice, isGm, rolls }: { dice: Dice; isGm: boolean; rolls: RollResult[] }) {
+/** Dados do celular (aba Dados): fileira de dados e expressão; o histórico vem abaixo. */
+export function DiceTab({ dice, isGm }: { dice: Dice; isGm: boolean }) {
   return (
     <>
-      <Card tone={rolls.at(-1)?.secret ? "gm" : undefined}>
-        <div className="card-body">
-          <LastRoll roll={rolls.at(-1)} />
-        </div>
-      </Card>
       <div className="dice-row" style={{ overflow: "hidden" }}>
         {QUICK_DICE.map((s) => (
           <button
             key={s}
             type="button"
             className="die"
-            style={{ flex: "none", width: 52, height: 48 }}
+            style={{ flex: 1, minWidth: 0, height: 48 }}
             onClick={() => void dice.send(`1d${s}`)}
           >
             d{s}
@@ -331,7 +265,7 @@ export function DiceTab({ dice, isGm, rolls }: { dice: Dice; isGm: boolean; roll
         ))}
       </div>
       <ExpressionRow dice={dice} isGm={isGm} />
-      <TestControls dice={dice} isGm={isGm} />
+      <ErrorText>{dice.error}</ErrorText>
     </>
   );
 }

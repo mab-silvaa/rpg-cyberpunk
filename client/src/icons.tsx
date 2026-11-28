@@ -40,6 +40,7 @@ const PATHS = {
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
   image:
     '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   chevr: '<path d="M9 6l6 6-6 6"/>',
 } as const;
 
