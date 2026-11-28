@@ -1,11 +1,21 @@
 import type {
   ApiError,
+  InitiativeEntryInput,
+  InitiativeView,
+  Note,
+  NoteInput,
+  CharacterView,
+  FogShapeInput,
+  FogState,
   ImageInfo,
   LoginRequest,
   LoginResponse,
   PresenceUser,
   SceneInput,
   SceneSummary,
+  TokenInput,
+  TokenView,
+  BackupStatus,
   TunnelInfo,
   User,
 } from "@vtt/shared";
@@ -32,6 +42,36 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return data;
 }
 
+/** Envio com progresso e cancelamento (o fetch não informa o andamento do envio). */
+export function uploadImageWithProgress(
+  file: File,
+  onProgress: (percent: number) => void,
+): { promise: Promise<ImageInfo>; cancel: () => void } {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<ImageInfo>((resolve, reject) => {
+    xhr.open("POST", "/api/images");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data: Partial<ApiError> & Partial<ImageInfo> = {};
+      try {
+        data = JSON.parse(xhr.responseText) as typeof data;
+      } catch {
+        /* resposta sem JSON */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data as ImageInfo);
+      else reject(new ApiFailure(data.error ?? "Algo deu errado", xhr.status));
+    };
+    xhr.onerror = () => reject(new ApiFailure("Sem conexão com o servidor", 0));
+    xhr.onabort = () => reject(new ApiFailure("Envio cancelado", 0));
+    const form = new FormData();
+    form.append("file", file);
+    xhr.send(form);
+  });
+  return { promise, cancel: () => xhr.abort() };
+}
+
 export const api = {
   me: () => request<LoginResponse>("GET", "/api/me").then((r) => r.user),
   login: (body: LoginRequest) =>
@@ -41,6 +81,7 @@ export const api = {
   rename: (id: number, name: string) =>
     request<PresenceUser[]>("PATCH", `/api/users/${id}`, { name }),
   kick: (id: number) => request<void>("DELETE", `/api/users/${id}`),
+  backupStatus: () => request<BackupStatus>("GET", "/api/backup-status"),
   tunnel: () => request<TunnelInfo>("GET", "/api/tunnel"),
   scenes: () => request<SceneSummary[]>("GET", "/api/scenes"),
   createScene: (input: SceneInput) => request<SceneSummary[]>("POST", "/api/scenes", input),
@@ -48,6 +89,42 @@ export const api = {
     request<SceneSummary[]>("PATCH", `/api/scenes/${id}`, input),
   activateScene: (id: number) => request<SceneSummary[]>("POST", `/api/scenes/${id}/activate`),
   deleteScene: (id: number) => request<SceneSummary[]>("DELETE", `/api/scenes/${id}`),
+  createToken: (input: TokenInput) => request<TokenView>("POST", "/api/tokens", input),
+  updateToken: (id: number, input: TokenInput) =>
+    request<TokenView>("PATCH", `/api/tokens/${id}`, input),
+  deleteToken: (id: number) => request<void>("DELETE", `/api/tokens/${id}`),
+  fogEnabled: (sceneId: number, enabled: boolean) =>
+    request<FogState>("PATCH", `/api/scenes/${sceneId}/fog`, { enabled }),
+  addFogShape: (sceneId: number, shape: FogShapeInput) =>
+    request<unknown>("POST", `/api/scenes/${sceneId}/fog/shapes`, shape),
+  undoFog: (sceneId: number) =>
+    request<FogState>("DELETE", `/api/scenes/${sceneId}/fog/shapes/last`),
+  coverAllFog: (sceneId: number) =>
+    request<FogState>("POST", `/api/scenes/${sceneId}/fog/cover-all`),
+  revealAllFog: (sceneId: number) =>
+    request<FogState>("POST", `/api/scenes/${sceneId}/fog/reveal-all`),
+  createCharacter: (body: { ownerId?: number | null; data?: unknown }) =>
+    request<CharacterView>("POST", "/api/characters", body),
+  assignCharacter: (id: number, ownerId: number | null) =>
+    request<CharacterView>("PATCH", `/api/characters/${id}`, { ownerId }),
+  deleteCharacter: (id: number) => request<void>("DELETE", `/api/characters/${id}`),
+  notes: () => request<Note[]>("GET", "/api/notes"),
+  createNote: (input: NoteInput) => request<Note>("POST", "/api/notes", input),
+  updateNote: (id: number, input: NoteInput) => request<Note>("PATCH", `/api/notes/${id}`, input),
+  deleteNote: (id: number) => request<void>("DELETE", `/api/notes/${id}`),
+  addInitiative: (input: InitiativeEntryInput) =>
+    request<InitiativeView>("POST", "/api/initiative/entries", input),
+  updateInitiative: (id: number, input: InitiativeEntryInput) =>
+    request<InitiativeView>("PATCH", `/api/initiative/entries/${id}`, input),
+  removeInitiative: (id: number) =>
+    request<InitiativeView>("DELETE", `/api/initiative/entries/${id}`),
+  initiativeFromTokens: (tokenIds: number[]) =>
+    request<InitiativeView>("POST", "/api/initiative/from-tokens", { tokenIds }),
+  rollInitiative: () => request<InitiativeView>("POST", "/api/initiative/roll", {}),
+  startInitiative: () => request<InitiativeView>("POST", "/api/initiative/start"),
+  nextInitiative: () => request<InitiativeView>("POST", "/api/initiative/next"),
+  endInitiative: () => request<InitiativeView>("POST", "/api/initiative/end"),
+  clearInitiative: () => request<InitiativeView>("POST", "/api/initiative/clear"),
   uploadImage: (file: File) => {
     const form = new FormData();
     form.append("file", file);

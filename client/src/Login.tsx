@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { APP_NAME, NAME_MAX_LENGTH, type User } from "@vtt/shared";
+import { NAME_MAX_LENGTH, type User } from "@vtt/shared";
 import { api } from "./api";
+import { Icon } from "./icons";
+import { Alert, Badge, Button, Card, CheckField, TextField } from "./ui";
 
 export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [name, setName] = useState("");
@@ -23,44 +25,66 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   }
 
   return (
-    <main className="shell">
-      <h1>{APP_NAME}</h1>
-      <form className="card" onSubmit={(e) => void submit(e)}>
-        <label>
-          Seu nome
-          <input
+    <main className="entry-page">
+      <Card tone={gm ? "gm" : undefined} className="entry-card">
+        <form className="entry-body" onSubmit={(e) => void submit(e)}>
+          <div className="entry-head">
+            <span className="logo-mark" />
+            <h1 className="logo-name">Salandra</h1>
+            <span style={{ flex: 1 }} />
+            {gm ? (
+              <Badge tone="gm" icon="lock">
+                Mestre
+              </Badge>
+            ) : (
+              <Badge tone="accent">Jogador</Badge>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <h2 className="entry-title">Entrar na mesa</h2>
+            <p className="details" style={{ fontSize: 14, lineHeight: "21px" }}>
+              Cyberpunk RED, online. Só o mestre precisa de senha.
+            </p>
+          </div>
+          <TextField
+            label="Seu nome"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={NAME_MAX_LENGTH}
             autoFocus
             required
           />
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={gm} onChange={(e) => setGm(e.target.checked)} />
-          Sou o mestre
-        </label>
-        {gm && (
-          <label>
-            Senha do mestre
-            <input
+          <CheckField
+            label="Sou o mestre"
+            gm
+            checked={gm}
+            onChange={(e) => setGm(e.target.checked)}
+          />
+          {gm && (
+            <TextField
+              label="Senha do mestre"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              error={error}
               required
             />
-          </label>
-        )}
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={busy}>
-          Entrar
-        </button>
-      </form>
+          )}
+          {!gm && error && <Alert tone="danger">{error}</Alert>}
+          <Button
+            type="submit"
+            variant={gm ? "gm" : "primary"}
+            solid={gm}
+            size="lg"
+            block
+            disabled={busy}
+          >
+            <Icon name={gm ? "lock" : "logout"} size={19} />
+            {gm ? "Entrar como mestre" : "Entrar"}
+          </Button>
+        </form>
+      </Card>
     </main>
   );
 }

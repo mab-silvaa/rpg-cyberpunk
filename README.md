@@ -4,6 +4,10 @@ VTT (mesa virtual) próprio para a campanha de Cyberpunk RED: mapa com tokens em
 
 A spec e o plano de implementação estão em documentos separados do projeto. O plano divide o trabalho em 10 fases, cada uma um pull request.
 
+## Interface
+
+O visual segue o sistema de design Salandra · Neon Grid. Veja [docs/design-system.md](docs/design-system.md): a regra é não inventar componentes fora do sistema.
+
 ## Status
 
 - Fase 0: monorepo, servidor com health check, front React, SQLite com migrações e CI
@@ -11,7 +15,17 @@ A spec e o plano de implementação estão em documentos separados do projeto. O
 
 - Fase 2: cenas com imagem de fundo enviada pelo mestre, grid configurável, zoom, pan, régua (os outros veem a régua em tempo real) e prévia de cenas no painel do mestre
 
-Tokens, fog of war, dados e fichas chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
+- Fase 3: tokens (nome, tamanho, cor, imagem opcional, dono, oculto, hostil) que o mestre cria no painel; quem é dono move o próprio token, com encaixe no grid (segure Shift para soltar livre) e os outros veem em tempo real
+
+- Fase 4: fog of war por cena (guardada como lista de formas: retângulo e pincel, revelar ou cobrir, com desfazer, cobrir tudo e revelar tudo). O servidor não envia aos jogadores os tokens que estão sob fog
+
+- Fase 5: dados no servidor (`crypto.randomInt`) com histórico guardado. Escreva rolagens como `2d6+3` ou `1d10!+8` (o `!` pede o teste do RED: 10 natural soma outro d10, 1 natural subtrai outro d10); dano em d6 marca crítico com dois ou mais 6. O mestre pode rolar em segredo
+
+- Fase 6: ficha do Cyberpunk RED (STATs, skills, vitais, armadura, armas, cyberware, equipamento, lifepath) com autosave. HP máximo, Humanity máxima e Death Save são calculados; clicar numa skill ou arma rola o teste. Token ligado a uma ficha mostra a barra de HP (jogadores só veem o HP de fichas de personagem, nunca o de NPC)
+
+- Fase 7: painel do mestre com notas privadas em Markdown (autosave), NPCs (fichas sem jogador, com atalho para colocar no mapa e duplicar) e iniciativa (tokens da cena, rolagem 1d10 + REF para NPCs, ordem, rodada e vez; os jogadores veem só a ordem)
+
+Backup e teste ponta a ponta chegam nas próximas fases. O app não traz mapas, imagens nem conteúdo de campanha: tudo que aparece na mesa é o que o mestre envia.
 
 ## Desenvolvimento no Linux
 
@@ -64,22 +78,33 @@ Em desenvolvimento (`npm start`), o servidor também lê o `.env` da raiz. Sem `
 
 ## Scripts
 
-| Comando              | O que faz                                             |
-| -------------------- | ----------------------------------------------------- |
-| `npm start`          | Desenvolvimento com recarga automática                |
-| `npm run build`      | Compila `shared`, `server` e `client`                 |
-| `npm run start:prod` | Roda o servidor compilado, que também entrega o front |
-| `npm test`           | Testes do servidor (Vitest)                           |
-| `npm run setup`      | Cria `data/` e o `.env` para rodar com Docker         |
-| `npm run lint`       | ESLint                                                |
-| `npm run typecheck`  | Verificação de tipos nos três pacotes                 |
-| `npm run format`     | Prettier (`format:check` só confere)                  |
+| Comando                          | O que faz                                                             |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `npm start`                      | Desenvolvimento com recarga automática                                |
+| `npm run build`                  | Compila `shared`, `server` e `client`                                 |
+| `npm run start:prod`             | Roda o servidor compilado, que também entrega o front                 |
+| `npm test`                       | Testes do servidor (Vitest)                                           |
+| `npm run setup`                  | Cria `data/` e o `.env` para rodar com Docker                         |
+| `npm run backup`                 | Gera `backups/salandra-backup-DATA.zip` (banco + imagens)             |
+| `npm run restore -- arquivo.zip` | Restaura um backup (`--force` se já houver dados)                     |
+| `npm run e2e`                    | Teste ponta a ponta com dois navegadores (rode `npm run build` antes) |
+| `npm run lint`                   | ESLint                                                                |
+| `npm run typecheck`              | Verificação de tipos nos três pacotes                                 |
+| `npm run format`                 | Prettier (`format:check` só confere)                                  |
 
 ## Estrutura
 
 - `shared/`: tipos dos eventos e constantes usados por servidor e cliente
 - `server/`: Express, Socket.IO e SQLite; migrações numeradas em `server/migrations/`
 - `client/`: React + Vite
+
+Roteiro para testar com os amigos: [docs/teste-manual.md](docs/teste-manual.md).
+
+## Backup e restauração
+
+Faça `npm run backup` antes de cada sessão importante e guarde uma cópia fora do computador. O painel do mestre avisa quando passa de 7 dias sem backup. Com Docker, rode no terminal da pasta do projeto: `docker compose exec app node server/dist/cli/backup.js` (o zip aparece em `backups/`).
+
+Para restaurar: pare o app (`docker compose down`), rode `npm run restore -- backups/ARQUIVO.zip --force` e suba de novo. Os dados anteriores nunca são apagados: ficam em `data.before-restore-DATA/`.
 
 ## Dados da campanha
 

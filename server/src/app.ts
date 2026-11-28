@@ -1,3 +1,4 @@
+import { lastBackupAt } from "./backup.js";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -30,6 +31,17 @@ import { normalizeName, Presence, Users } from "./users.js";
 import { Images } from "./images.js";
 import { registerMapRoutes, registerMapSocket, snapshotFor } from "./map.js";
 import { Scenes } from "./scenes.js";
+import {
+  CharacterHub,
+  Characters,
+  registerCharacterRoutes,
+  registerCharacterSocket,
+} from "./characters.js";
+import { Initiative, registerInitiativeRoutes } from "./initiative.js";
+import { Notes, registerNoteRoutes } from "./notes.js";
+import { registerDiceSocket, Rolls } from "./dice.js";
+import { Fog, registerFogRoutes } from "./fog.js";
+import { registerTokenRoutes, registerTokenSocket, TokenHub, Tokens } from "./tokens.js";
 
 export type VttServer = Server<
   ClientToServerEvents,
@@ -59,7 +71,14 @@ const fail = (res: Response, status: number, error: string): void => {
 export function createApp(config: Config, db: Database.Database): AppContext {
   const app = express();
   if (config.trustProxy) app.set("trust proxy", 1);
-  app.use(express.json({ limit: "10kb" }));
+  // Notas e fichas podem ser grandes; o resto das rotas aceita pouco.
+  const smallJson = express.json({ limit: "10kb" });
+  const bigJson = express.json({ limit: "200kb" });
+  app.use((req, res, next) =>
+    (req.path.startsWith("/api/notes") || req.path.startsWith("/api/characters")
+      ? bigJson
+      : smallJson)(req, res, next),
+  );
 
   const users = new Users(db);
   const presence = new Presence();
@@ -91,11 +110,26 @@ export function createApp(config: Config, db: Database.Database): AppContext {
 
   const images = new Images(db, path.join(config.dataDir, "uploads"));
   const scenes = new Scenes(db, images);
+  const fog = new Fog(db);
+  const rolls = new Rolls(db);
+  const initiative = new Initiative(db);
+  const notes = new Notes(db);
+  const characters = new Characters(db, users);
+  const tokens = new Tokens(db, images, scenes, users, fog);
   // Uploads que o mestre enviou e nunca usou numa cena não ficam para sempre.
   images.sweepOrphans(24 * 60 * 60 * 1000);
 
   const httpServer = http.createServer(app);
   const io: VttServer = new Server(httpServer);
+  const tokenHub = new TokenHub(io, tokens);
+  const characterHub = new CharacterHub(io);
+  // Mudou a ficha: os tokens ligados a ela mostram o HP novo.
+  const onCharacterChanged = (id: number, tokenIds?: number[]): void => {
+    for (const tokenId of tokenIds ?? tokens.byCharacter(id).map((t) => t.id)) {
+      const token = tokens.byId(tokenId);
+      if (token) tokenHub.upsert(token);
+    }
+  };
   const broadcastPresence = (): void => {
     io.emit("presence:update", presenceList());
   };
@@ -167,8 +201,11 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     res.json(presenceList());
   });
 
-  app.patch("/api/users/:id", requireGm, (req, res) => {
+  // O mestre renomeia qualquer um; cada jogador renomeia só a si mesmo.
+  app.patch("/api/users/:id", requireUser, (req, res) => {
     const id = Number(req.params.id);
+    const self = res.locals.user as User;
+    if (!self.isGm && id !== self.id) return fail(res, 403, "Só o mestre faz isso");
     const name = normalizeName((req.body as { name?: unknown } | undefined)?.name);
     if (!users.byId(id)) return fail(res, 404, "Usuário não encontrado");
     if (!name) return fail(res, 400, "Digite um nome de 1 a 32 caracteres");
@@ -182,10 +219,21 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     if (id === (res.locals.user as User).id)
       return fail(res, 400, "Você não pode expulsar a si mesmo");
     if (!users.byId(id)) return fail(res, 404, "Usuário não encontrado");
+    const orphaned = characters.ownedBy(id).map((c) => c.id);
     users.delete(id);
     io.in(`user:${id}`).disconnectSockets(true);
     res.status(204).end();
     broadcastPresence();
+    // Os tokens e as fichas dele(a) ficam sem dono; o mestre precisa ver isso.
+    for (const characterId of orphaned) {
+      const c = characters.byId(characterId);
+      if (c) characterHub.update(c);
+    }
+    tokenHub.resync();
+  });
+
+  app.get("/api/backup-status", requireGm, (_req, res) => {
+    res.json({ lastBackupAt: lastBackupAt(config.dataDir) });
   });
 
   app.get("/api/tunnel", requireGm, async (_req, res) => {
@@ -203,7 +251,70 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     emitScene: (scene) => {
       // Ao trocar de cena, as réguas da cena antiga somem.
       clearRulers();
+      fog.invalidate();
       io.emit("scene:update", scene);
+      const active = scenes.active();
+      const activeFog = active ? fog.state(active.id) : null;
+      if (activeFog) io.to("players").emit("fog:set", activeFog);
+      tokenHub.resync();
+    },
+  });
+  registerTokenRoutes({ app, tokens, hub: tokenHub, requireGm });
+  registerCharacterRoutes({
+    app,
+    characters,
+    hub: characterHub,
+    requireUser,
+    requireGm,
+    onChanged: onCharacterChanged,
+    tokenIdsOf: (id) => tokens.byCharacter(id).map((t) => t.id),
+  });
+  registerNoteRoutes({ app, notes, requireGm });
+  const broadcastInitiative = (): void => {
+    io.to("gm").emit("initiative:set", initiative.view(true));
+    io.to("players").emit("initiative:set", initiative.view(false));
+  };
+  registerInitiativeRoutes({
+    app,
+    initiative,
+    requireGm,
+    tokensById: (ids) =>
+      ids.flatMap((id) => {
+        const token = tokens.byId(id);
+        return token ? [{ id: token.id, name: token.name, hidden: token.hidden }] : [];
+      }),
+    rollFor: (entry) => {
+      const token = entry.tokenId === null ? null : tokens.byId(entry.tokenId);
+      const sheet = token?.characterId == null ? null : characters.byId(token.characterId);
+      const reflex = sheet?.data.stats.REF ?? 0;
+      // A rolagem sai no histórico, no nome do mestre; a de entrada oculta é secreta.
+      const gmUser = users.list().find((u) => u.isGm);
+      if (!gmUser) return null;
+      const reply = rolls.roll(gmUser, {
+        expression: `1d10+${reflex}`,
+        label: `Iniciativa: ${entry.name}`,
+        secret: entry.hidden,
+      });
+      if (!reply.ok) return null;
+      if (reply.roll.secret) io.to("gm").emit("dice:result", reply.roll);
+      else io.emit("dice:result", reply.roll);
+      return reply.roll.total;
+    },
+    onChange: broadcastInitiative,
+  });
+  registerFogRoutes({
+    app,
+    fog,
+    requireGm,
+    onSet: (state) => {
+      io.to("gm").emit("fog:set", state);
+      if (scenes.active()?.id === state.sceneId) io.to("players").emit("fog:set", state);
+      tokenHub.refresh();
+    },
+    onAdd: (sceneId, shape) => {
+      io.to("gm").emit("fog:add", sceneId, shape);
+      if (scenes.active()?.id === sceneId) io.to("players").emit("fog:add", sceneId, shape);
+      tokenHub.refresh();
     },
   });
 
@@ -223,10 +334,26 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   io.on("connection", (socket) => {
     const { user } = socket.data;
     void socket.join(`user:${user.id}`);
+    void socket.join(user.isGm ? "gm" : "players");
     presence.add(user.id, socket.id);
     socket.emit("server:hello", { version: config.version, user });
-    socket.emit("state:snapshot", snapshotFor(scenes.active(), rulers));
+    const activeFog = scenes.active() ? fog.state(scenes.active()!.id) : null;
+    socket.emit(
+      "state:snapshot",
+      snapshotFor(
+        scenes.active(),
+        rulers,
+        tokenHub.attach(socket),
+        user.isGm ? fog.all() : activeFog ? [activeFog] : [],
+        rolls.recent(user.isGm),
+        characters.forUser(user),
+        initiative.view(user.isGm),
+      ),
+    );
     registerMapSocket(socket, rulers);
+    registerTokenSocket(socket, tokens, tokenHub);
+    registerDiceSocket(socket, io, rolls);
+    registerCharacterSocket(socket, characters, characterHub, onCharacterChanged);
     broadcastPresence();
 
     socket.on("echo:ping", (message, ack) => {

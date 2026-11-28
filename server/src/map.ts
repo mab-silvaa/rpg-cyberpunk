@@ -8,7 +8,12 @@ import type {
   RulerState,
   SceneSummary,
   SceneView,
+  CharacterView,
+  FogState,
+  InitiativeView,
+  RollResult,
   StateSnapshot,
+  TokenView,
 } from "@vtt/shared";
 import type { VttSocket } from "./app.js";
 import type { Config } from "./config.js";
@@ -127,8 +132,21 @@ export function parseRuler(raw: unknown): RulerLine | null {
 export function snapshotFor(
   scene: SceneSummary | null,
   rulers: Map<string, RulerState>,
+  tokens: TokenView[],
+  fogs: FogState[],
+  rolls: RollResult[],
+  characters: CharacterView[],
+  initiative: InitiativeView,
 ): StateSnapshot {
-  return { scene: scene ? toView(scene) : null, rulers: [...rulers.values()] };
+  return {
+    scene: scene ? toView(scene) : null,
+    rulers: [...rulers.values()],
+    tokens,
+    fogs,
+    rolls,
+    characters,
+    initiative,
+  };
 }
 
 /** Eventos de mapa por conexão: régua. */

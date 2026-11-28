@@ -3,6 +3,7 @@ import type { User } from "@vtt/shared";
 import { api } from "./api";
 import { Home } from "./Home";
 import { Login } from "./Login";
+import { ConfirmProvider } from "./ui";
 
 /** undefined = ainda verificando a sessão; null = sem sessão. */
 export function App() {
@@ -15,5 +16,9 @@ export function App() {
   const logout = useCallback(() => setUser(null), []);
 
   if (user === undefined) return null;
-  return user ? <Home user={user} onLogout={logout} /> : <Login onLogin={setUser} />;
+  return (
+    <ConfirmProvider>
+      {user ? <Home user={user} onLogout={logout} /> : <Login onLogin={setUser} />}
+    </ConfirmProvider>
+  );
 }

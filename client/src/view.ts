@@ -32,3 +32,16 @@ export function zoomAt(view: View, pointer: { x: number; y: number }, direction:
   const anchor = { x: (pointer.x - view.x) / view.scale, y: (pointer.y - view.y) / view.scale };
   return { scale, x: pointer.x - anchor.x * scale, y: pointer.y - anchor.y * scale };
 }
+
+/** Zoom por fator (pinça e passos do celular), mantendo o ponto fixo e respeitando os limites. */
+export function zoomBy(
+  view: View,
+  pointer: { x: number; y: number },
+  factor: number,
+  min = MIN_SCALE,
+  max = MAX_SCALE,
+): View {
+  const scale = clamp(view.scale * factor, min, max);
+  const anchor = { x: (pointer.x - view.x) / view.scale, y: (pointer.y - view.y) / view.scale };
+  return { scale, x: pointer.x - anchor.x * scale, y: pointer.y - anchor.y * scale };
+}

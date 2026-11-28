@@ -186,8 +186,13 @@ export class Scenes {
   delete(id: number): boolean {
     const scene = this.byId(id);
     if (!scene) return false;
+    // Os tokens da cena somem junto; as imagens deles, se ninguém mais usa, também.
+    const tokenImages = this.db
+      .prepare("SELECT DISTINCT image_id FROM tokens WHERE scene_id = ? AND image_id IS NOT NULL")
+      .all(id) as { image_id: number }[];
     this.db.prepare("DELETE FROM scenes WHERE id = ?").run(id);
     this.images.deleteIfUnused(scene.imageId);
+    for (const { image_id } of tokenImages) this.images.deleteIfUnused(image_id);
     return true;
   }
 }

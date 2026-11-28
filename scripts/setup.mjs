@@ -1,5 +1,6 @@
 // Prepara a máquina para rodar com Docker: cria data/ e escreve o .env com os segredos e o seu usuário.
 // Uso: npm run setup [-- --password=SENHA] [-- --force]
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,6 +14,34 @@ const force = args.includes("--force");
 const passwordArg = args.find((a) => a.startsWith("--password="))?.slice("--password=".length);
 
 fs.mkdirSync(path.join(root, "data"), { recursive: true });
+fs.mkdirSync(path.join(root, "backups"), { recursive: true });
+
+/** Roda um comando e devolve a saída, ou null se ele não existir ou falhar. */
+function run(cmd, cmdArgs) {
+  const r = spawnSync(cmd, cmdArgs, { encoding: "utf8" });
+  return r.error || r.status !== 0 ? null : r.stdout.trim();
+}
+
+/** Confere o que o Docker precisa e devolve avisos em português (vazio = tudo certo). */
+function checkDocker() {
+  const warnings = [];
+  if (run("docker", ["--version"]) === null) {
+    warnings.push("Docker não encontrado. Instale em https://docs.docker.com/engine/install/");
+    return warnings;
+  }
+  if (run("docker", ["compose", "version"]) === null) {
+    warnings.push("O plugin 'docker compose' não está instalado (pacote docker-compose-plugin).");
+  }
+  if (run("docker", ["info"]) === null) {
+    warnings.push(
+      "O Docker não responde para o seu usuário. Se o serviço está ligado, rode: sudo usermod -aG docker $USER e saia e entre de novo na sessão.",
+    );
+  }
+  if (process.platform === "linux" && run("getenforce", []) === "Enforcing") {
+    warnings.push("SELinux ativo: o compose já usa ':z' nos volumes, então deve funcionar.");
+  }
+  return warnings;
+}
 
 /** Lê um .env simples (CHAVE=valor por linha) preservando o que já existe. */
 function readEnv() {
@@ -65,4 +94,11 @@ fs.writeFileSync(envPath, body, { mode: 0o600 });
 console.log(`Pasta de dados: ${path.join(root, "data")}`);
 console.log(`Arquivo ${envPath} atualizado (somente você lê).`);
 for (const message of messages) console.log(message);
+const warnings = checkDocker();
+if (warnings.length > 0) {
+  console.log("\nAtenção:");
+  for (const w of warnings) console.log(` - ${w}`);
+} else {
+  console.log("Docker e docker compose encontrados.");
+}
 console.log("\nPróximo passo: docker compose up -d --build");

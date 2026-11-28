@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
 
+export interface ImageState {
+  image: HTMLImageElement | undefined;
+  /** A imagem não carregou (estado de erro do sistema de design). */
+  failed: boolean;
+}
+
 /** Carrega uma imagem do mesmo servidor (o cookie de sessão vai junto). */
-export function useImage(url: string | null): HTMLImageElement | undefined {
-  const [loaded, setLoaded] = useState<{ url: string; image: HTMLImageElement }>();
+export function useImageState(url: string | null): ImageState {
+  const [loaded, setLoaded] = useState<{
+    url: string;
+    image?: HTMLImageElement;
+    failed?: boolean;
+  }>();
 
   useEffect(() => {
     if (!url) return;
@@ -11,6 +21,9 @@ export function useImage(url: string | null): HTMLImageElement | undefined {
     img.onload = () => {
       if (!cancelled) setLoaded({ url, image: img });
     };
+    img.onerror = () => {
+      if (!cancelled) setLoaded({ url, failed: true });
+    };
     img.src = url;
     return () => {
       cancelled = true;
@@ -18,5 +31,10 @@ export function useImage(url: string | null): HTMLImageElement | undefined {
   }, [url]);
 
   // Enquanto a imagem nova não chega, não mostra a da cena anterior.
-  return loaded && loaded.url === url ? loaded.image : undefined;
+  const current = loaded && loaded.url === url ? loaded : undefined;
+  return { image: current?.image, failed: current?.failed === true };
+}
+
+export function useImage(url: string | null): HTMLImageElement | undefined {
+  return useImageState(url).image;
 }
