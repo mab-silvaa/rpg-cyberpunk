@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { NAME_MAX_LENGTH, type User } from "@vtt/shared";
+import { NAME_MAX_LENGTH, NAME_MIN_LENGTH, type User } from "@vtt/shared";
 
 interface UserRow {
   id: number;
@@ -16,7 +16,7 @@ export function normalizeName(raw: unknown): string | null {
     .replace(/\p{Cc}/gu, "")
     .replace(/\s+/g, " ")
     .trim();
-  return name.length >= 1 && name.length <= NAME_MAX_LENGTH ? name : null;
+  return name.length >= NAME_MIN_LENGTH && name.length <= NAME_MAX_LENGTH ? name : null;
 }
 
 const nameKey = (name: string): string => name.toLowerCase();

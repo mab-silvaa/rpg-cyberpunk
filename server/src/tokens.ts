@@ -5,6 +5,7 @@ import {
   TOKEN_NAME_MAX_LENGTH,
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
+  conditionOf,
   isFogged,
   maxHp,
   type ApiError,
@@ -32,19 +33,33 @@ interface TokenRow {
   owner_id: number | null;
   hidden: number;
   hostile: number;
+  defeated: number;
   character_id: number | null;
   filename: string | null;
   char_data: string | null;
 }
 
 const SELECT = `
-  SELECT t.id, t.scene_id, t.name, t.x, t.y, t.size, t.color, t.image_id, t.owner_id, t.hidden, t.hostile,
+  SELECT t.id, t.scene_id, t.name, t.x, t.y, t.size, t.color, t.image_id, t.owner_id, t.hidden, t.hostile, t.defeated,
          t.character_id, i.filename, c.data AS char_data
   FROM tokens t
   LEFT JOIN images i ON i.id = t.image_id
   LEFT JOIN characters c ON c.id = t.character_id`;
 
-const toView = (row: TokenRow): TokenView => ({
+/** Hostil com a ficha em zero de HP cai sozinho; NPC aliado só pela marca; jogador nunca. */
+const isDefeated = (
+  row: Pick<TokenRow, "owner_id" | "hostile" | "defeated">,
+  hp: { current: number; max: number } | null,
+): boolean =>
+  row.owner_id === null &&
+  (row.defeated === 1 || (row.hostile === 1 && hp !== null && hp.max > 0 && hp.current <= 0));
+
+const toView = (row: TokenRow): TokenView => {
+  const hp = row.char_data ? hpOf(JSON.parse(row.char_data) as CharacterData) : null;
+  return viewOf(row, hp);
+};
+
+const viewOf = (row: TokenRow, hp: { current: number; max: number } | null): TokenView => ({
   id: row.id,
   sceneId: row.scene_id,
   name: row.name,
@@ -56,8 +71,10 @@ const toView = (row: TokenRow): TokenView => ({
   ownerId: row.owner_id,
   hidden: row.hidden === 1,
   hostile: row.hostile === 1,
+  defeated: isDefeated(row, hp),
   characterId: row.character_id,
-  hp: row.char_data ? hpOf(JSON.parse(row.char_data) as CharacterData) : null,
+  condition: hp !== null && hp.max > 0 ? conditionOf(hp) : null,
+  hp,
 });
 
 const hpOf = (data: CharacterData): { current: number; max: number } => ({
@@ -141,6 +158,11 @@ export function parseTokenInput(body: unknown, creating: boolean): ParseResult {
     if (typeof raw.hostile !== "boolean")
       return { ok: false, error: "hostile deve ser verdadeiro ou falso" };
     value.hostile = raw.hostile;
+  }
+  if (raw.defeated !== undefined) {
+    if (typeof raw.defeated !== "boolean")
+      return { ok: false, error: "defeated deve ser verdadeiro ou falso" };
+    value.defeated = raw.defeated;
   }
   return { ok: true, value };
 }
@@ -226,8 +248,8 @@ export class Tokens {
     const y = input.y ?? (scene.imageHeight ?? 1400) / 2;
     const result = this.db
       .prepare(
-        `INSERT INTO tokens (scene_id, name, x, y, size, color, image_id, owner_id, hidden, hostile, character_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tokens (scene_id, name, x, y, size, color, image_id, owner_id, hidden, hostile, defeated, character_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         scene.id,
@@ -240,6 +262,7 @@ export class Tokens {
         input.ownerId ?? null,
         input.hidden ? 1 : 0,
         input.hostile ? 1 : 0,
+        input.defeated ? 1 : 0,
         input.characterId ?? null,
       );
     return this.byId(Number(result.lastInsertRowid))!;
@@ -256,7 +279,7 @@ export class Tokens {
     const previousImage = this.imageIdOf(id);
     this.db
       .prepare(
-        `UPDATE tokens SET name = ?, x = ?, y = ?, size = ?, color = ?, image_id = ?, owner_id = ?, hidden = ?, hostile = ?,
+        `UPDATE tokens SET name = ?, x = ?, y = ?, size = ?, color = ?, image_id = ?, owner_id = ?, hidden = ?, hostile = ?, defeated = ?,
          character_id = ? WHERE id = ?`,
       )
       .run(
@@ -269,6 +292,7 @@ export class Tokens {
         input.ownerId === undefined ? current.ownerId : input.ownerId,
         (input.hidden ?? current.hidden) ? 1 : 0,
         (input.hostile ?? current.hostile) ? 1 : 0,
+        this.storedDefeated(id, input),
         input.characterId === undefined ? current.characterId : input.characterId,
         id,
       );
@@ -276,6 +300,16 @@ export class Tokens {
       this.images.deleteIfUnused(previousImage);
     }
     return this.byId(id);
+  }
+
+  /** Valor gravado de "derrotado": só muda quando o pedido traz o campo (o mestre marca ou desfaz). */
+  private storedDefeated(id: number, input: TokenInput): number {
+    if (input.defeated === undefined) {
+      const row = this.db.prepare("SELECT defeated FROM tokens WHERE id = ?").get(id) as
+        { defeated: number } | undefined;
+      return row?.defeated ?? 0;
+    }
+    return input.defeated ? 1 : 0;
   }
 
   /** Grava a posição, mantendo o centro dentro do mapa. Devolve a posição gravada. */
@@ -337,6 +371,8 @@ export class TokenHub {
   constructor(
     private io: VttServer,
     private tokens: Tokens,
+    /** Algo que a iniciativa mostra (derrotado, nome) pode ter mudado. */
+    private onChange: () => void = () => {},
   ) {}
 
   /** Chamado ao conectar: devolve os tokens do snapshot e passa a acompanhar a conexão. */
@@ -360,6 +396,7 @@ export class TokenHub {
     this.io.to("gm").emit("token:upsert", token);
     const fogged = this.tokens.isFogged(token);
     for (const socket of this.players()) this.deliver(socket, token, fogged, "upsert");
+    this.onChange();
   }
 
   /**
@@ -399,6 +436,7 @@ export class TokenHub {
   remove(id: number): void {
     for (const seen of this.seen.values()) seen.delete(id);
     this.io.emit("token:remove", id);
+    this.onChange();
   }
 
   /** A cena ativa mudou ou foi apagada: manda a lista inteira certa para cada um. */

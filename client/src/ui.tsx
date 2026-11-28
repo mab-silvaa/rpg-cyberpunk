@@ -384,6 +384,81 @@ export function Panel({
   );
 }
 
+export interface SegmentOption<K extends string> {
+  key: K;
+  label: string;
+  /** Número ao lado do rótulo (opcional). */
+  count?: number;
+  icon?: IconName;
+  disabled?: boolean;
+}
+
+/**
+ * Grupo de botões segmentados (prancha 17): uma opção sempre ativa. Ciano para o que é de todos,
+ * magenta nas telas do mestre. Setas movem o foco; Enter ou Espaço ativam.
+ */
+export function SegmentedFilter<K extends string>({
+  options,
+  value,
+  onChange,
+  gm,
+  label,
+  size = "md",
+  disabled,
+}: {
+  options: SegmentOption<K>[];
+  value: K;
+  onChange: (key: K) => void;
+  gm?: boolean;
+  label: string;
+  /** "sm" = 36 px (PC denso), "md" = 44 px, "lg" = 52 px (celular). */
+  size?: "sm" | "md" | "lg";
+  /** Desativa o grupo inteiro (por exemplo, enquanto carrega a lista). */
+  disabled?: boolean;
+}) {
+  const group = useRef<HTMLDivElement>(null);
+  function onKeyDown(e: React.KeyboardEvent) {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    const buttons = [
+      ...(group.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []),
+    ];
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0 || buttons.length === 0) return;
+    e.preventDefault();
+    buttons[(at + step + buttons.length) % buttons.length]?.focus();
+  }
+  return (
+    <div
+      ref={group}
+      className={`segmented ${size} ${gm ? "gm" : ""} ${options.length > 3 ? "scroll" : ""}`}
+      role="group"
+      aria-label={label}
+      onKeyDown={onKeyDown}
+    >
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          className="seg"
+          aria-pressed={value === o.key}
+          disabled={disabled || o.disabled}
+          onClick={() => onChange(o.key)}
+        >
+          {o.icon && <Icon name={o.icon} size={16} />}
+          {o.label}
+          {o.count !== undefined && <span className="seg-count">{o.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export interface TabItem<K extends string> {
   key: K;
   label: string;

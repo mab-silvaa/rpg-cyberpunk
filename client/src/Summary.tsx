@@ -20,7 +20,7 @@ import { api } from "./api";
 import { CharacterSheet, Vital } from "./CharacterSheet";
 import { RollCard } from "./DicePanel";
 import { Icon } from "./icons";
-import { Badge, Button, Card, IconButton, MoreMenu, useConfirm } from "./ui";
+import { Badge, Button, Card, IconButton, MoreMenu, SegmentedFilter, useConfirm } from "./ui";
 
 const name = (c: CharacterView): string => c.data.handle || CHARACTER_NAME_FALLBACK;
 
@@ -199,17 +199,14 @@ export function HistoryPanel({
     <>
       <div className="filter-row">
         <span className="t-label grow">Últimas 100</span>
-        {filters.map((f) => (
-          <Button
-            key={f.key}
-            size="sm"
-            variant={filter === f.key ? "primary" : "ghost"}
-            aria-pressed={filter === f.key}
-            onClick={() => setFilter(f.key)}
-          >
-            {f.label}
-          </Button>
-        ))}
+        <SegmentedFilter
+          label="Filtrar rolagens"
+          options={filters}
+          value={filter}
+          onChange={setFilter}
+          gm={isGm}
+          size="sm"
+        />
       </div>
       {loading ? (
         <StateBox tone="loading" icon="refresh" title="Carregando histórico…" />
@@ -369,7 +366,10 @@ export function GmSheetsPanel({
                   {c.ownerId === null ? "NPC" : ownerName(c)}
                 </Badge>
               </span>
-              <span className="t-mono details">
+              <span
+                className="t-mono details"
+                style={c.data.hpCurrent <= 0 ? { color: "var(--danger)" } : undefined}
+              >
                 {c.data.hpCurrent}/{maxHp(c.data)}
               </span>
               <IconButton
@@ -401,17 +401,14 @@ export function GmSheetsPanel({
       <div className="filter-row">
         <Badge>{characters.length}</Badge>
         <span className="grow" />
-        {filters.map((f) => (
-          <Button
-            key={f.key}
-            size="sm"
-            variant={filter === f.key ? "primary" : "ghost"}
-            aria-pressed={filter === f.key}
-            onClick={() => setFilter(f.key)}
-          >
-            {f.label}
-          </Button>
-        ))}
+        <SegmentedFilter
+          label="Filtrar fichas"
+          options={filters}
+          value={filter}
+          onChange={setFilter}
+          gm
+          size="sm"
+        />
       </div>
       {characters.length === 0 && (
         <StateBox

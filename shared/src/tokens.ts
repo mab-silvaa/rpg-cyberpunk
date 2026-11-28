@@ -1,3 +1,12 @@
+/** Estado da vida em palavras (o jogador vê isto, e não os números, dos tokens que não são dele). */
+export type TokenCondition = "standing" | "hurt" | "down";
+
+/** Em pé, ferido (metade da vida ou menos) ou caído (zero). */
+export function conditionOf(hp: { current: number; max: number }): TokenCondition {
+  if (hp.current <= 0) return "down";
+  return hp.max > 0 && hp.current / hp.max <= 0.5 ? "hurt" : "standing";
+}
+
 /** Token como o cliente o enxerga. Coordenadas em pixels da imagem; x e y são o centro. */
 export interface TokenView {
   id: number;
@@ -16,8 +25,15 @@ export interface TokenView {
   hidden: boolean;
   /** Inimigo: o mapa desenha um anel vermelho em volta do token. */
   hostile: boolean;
+  /**
+   * Derrotado: o token "apaga" no mapa. Hostil cai sozinho quando o HP chega a zero; NPC aliado,
+   * só pelo mestre; token de jogador nunca fica derrotado.
+   */
+  defeated: boolean;
   /** Ficha ligada ao token (para o mestre; o jogador só vê o HP). */
   characterId: number | null;
+  /** Estado da vida em palavras; null se o token não tem ficha com HP. Todos recebem. */
+  condition: TokenCondition | null;
   /** HP da ficha ligada. Jogadores só recebem o HP de fichas que têm dono (personagens). */
   hp: { current: number; max: number } | null;
 }
@@ -34,6 +50,8 @@ export interface TokenInput {
   ownerId?: number | null;
   hidden?: boolean;
   hostile?: boolean;
+  /** Marca ou desfaz o "derrotado" manual (só vale para tokens sem dono). */
+  defeated?: boolean;
   characterId?: number | null;
 }
 

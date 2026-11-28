@@ -225,6 +225,42 @@ try {
   await gm.getByRole("tab", { name: "Fichas" }).click();
   await gm.getByRole("button", { name: "Zeta", exact: true }).waitFor();
 
+  log("Ficha: arma com skill escolhida na lista, ROF e notas ficam salvos");
+  await player.getByRole("button", { name: "Acrescentar as skills do jogo" }).click();
+  await player.getByRole("button", { name: "Nova arma" }).click();
+  await player.getByLabel("Skill da arma").selectOption({ index: 1 });
+  await player.getByLabel("ROF").fill("2");
+  await player.getByLabel("Notas da arma").fill("Silenciador");
+  let weapon;
+  for (let i = 0; i < 20 && !weapon; i++) {
+    await sleep(300);
+    const fresh = await socketFor(gmCtx);
+    fresh.socket.close();
+    weapon = fresh.snapshot.characters
+      .flatMap((c) => c.data.weapons)
+      .find((w) => w.notes === "Silenciador" && w.rof === 2);
+  }
+  check(weapon && weapon.rof === 2 && weapon.skill !== "", "arma salva com skill, ROF e notas");
+
+  log("Filtros em grupo: o mestre troca o filtro das fichas");
+  await gm.getByRole("tab", { name: "Fichas" }).click();
+  await gm.getByRole("button", { name: "NPCs", exact: true }).click();
+  check(
+    (await gm.getByRole("button", { name: "NPCs", exact: true }).getAttribute("aria-pressed")) ===
+      "true",
+    "filtro NPCs ativo",
+  );
+
+  log("Mestre marca o NPC como derrotado e o jogador recebe o token apagado");
+  await api(gm, "PATCH", `/api/tokens/${boss.id}`, { defeated: true });
+  await sleep(500);
+  check(
+    p.events.some(
+      (e) => e.name === "token:upsert" && e.args[0].id === boss.id && e.args[0].defeated === true,
+    ),
+    "jogador viu o token derrotado",
+  );
+
   log("Painel do mestre: nota privada nunca chega ao jogador");
   const note = await gm.request.post(`${BASE}/api/notes`, {
     data: { title: "Segredo", body: "# Plano\nO chefe é traidor" },

@@ -5,6 +5,7 @@ import {
   NOTE_BODY_MAX_LENGTH,
   type ApiError,
   type CharacterView,
+  type ImageInfo,
   type ClientToServerEvents,
   type InitiativeView,
   type Note,
@@ -14,7 +15,7 @@ import {
   type StateSnapshot,
   type TokenView,
 } from "@vtt/shared";
-import { api, startServer, type TestServer } from "./helpers.js";
+import { api, pngHeader, startServer, uploadForm, type TestServer } from "./helpers.js";
 
 type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -127,6 +128,38 @@ describe("iniciativa", () => {
     ] as const) {
       expect((await init(method, route, {}, rita)).status, `${method} ${route}`).toBe(403);
     }
+  });
+
+  it("pula na vez quem está com o token derrotado", async () => {
+    const image = await api<ImageInfo>(server, "POST", "/api/images", {
+      cookie: gm,
+      form: uploadForm(pngHeader(1000, 800)),
+    });
+    const scenes = await api<SceneSummary[]>(server, "POST", "/api/scenes", {
+      cookie: gm,
+      body: { name: "Beco", imageId: image.body.id },
+    });
+    const token = await api<TokenView>(server, "POST", "/api/tokens", {
+      cookie: gm,
+      body: { sceneId: scenes.body[0]!.id, name: "Capanga" },
+    });
+    await add("Kira", 17);
+    await add("Capanga", 12, { tokenId: token.body.id });
+    await add("Dex", 9);
+    await api(server, "PATCH", `/api/tokens/${token.body.id}`, {
+      cookie: gm,
+      body: { defeated: true },
+    });
+    const view = (await init("GET", "")).body;
+    expect(view.entries.map((e) => [e.name, e.defeated])).toEqual([
+      ["Kira", false],
+      ["Capanga", true],
+      ["Dex", false],
+    ]);
+    await init("POST", "/start");
+    expect((await init("POST", "/next")).body.activeId).toBe(view.entries[2]!.id);
+    const wrapped = (await init("POST", "/next")).body;
+    expect(wrapped).toMatchObject({ round: 2, activeId: view.entries[0]!.id });
   });
 
   it("ordena do maior valor para o menor; sem valor vai para o fim; empate pela ordem de entrada", async () => {

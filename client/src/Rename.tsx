@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { NAME_MAX_LENGTH } from "@vtt/shared";
+import { NAME_MAX_LENGTH, NAME_MIN_LENGTH } from "@vtt/shared";
 import { Icon } from "./icons";
 import { Button, Card, TextField } from "./ui";
 
@@ -40,6 +40,9 @@ export function RenameDialog({
     event.preventDefault();
     if (saving) return;
     if (!trimmed) return setError("O nome não pode ficar vazio.");
+    if (trimmed.length < NAME_MIN_LENGTH) {
+      return setError(`Use pelo menos ${NAME_MIN_LENGTH} caracteres.`);
+    }
     if (trimmed === name) return onClose();
     setSaving(true);
     setError(undefined);
@@ -80,7 +83,7 @@ export function RenameDialog({
               maxLength={NAME_MAX_LENGTH}
               disabled={saving}
               error={error}
-              hint={`1 a ${NAME_MAX_LENGTH} caracteres. Todos veem o novo nome na hora.`}
+              hint={`${NAME_MIN_LENGTH} a ${NAME_MAX_LENGTH} caracteres. Todos veem o novo nome na hora.`}
               onChange={(e) => {
                 setValue(e.target.value);
                 setError(undefined);
