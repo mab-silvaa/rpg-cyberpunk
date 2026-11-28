@@ -28,6 +28,7 @@ import { GmPanel } from "./GmPanel";
 import { Icon } from "./icons";
 import { InitiativeBar } from "./InitiativePanel";
 import { MapView } from "./MapView";
+import { TokenCard } from "./TokenCard";
 import {
   PLAYER_TABS,
   PLAYER_TABS_PC,
@@ -268,6 +269,7 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
     ((turnTokenId !== null && tokens.some((t) => t.id === turnTokenId && t.ownerId === user.id)) ||
       activeEntry.name === user.name ||
       (myCharacter !== undefined && activeEntry.name === myCharacter.data.handle));
+  const selectedToken = shownTokens.find((t) => t.id === selectedTokenId) ?? null;
   const hasInitiative = initiative.entries.length > 0 || initiative.round > 0;
 
   const connection = (
@@ -303,7 +305,7 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
         if (shown) void api.addFogShape(shown.id, shape).catch(() => undefined);
       }}
       selectedTokenId={selectedTokenId}
-      onSelectToken={user.isGm ? setSelectedTokenId : noSelect}
+      onSelectToken={user.isGm || narrow ? setSelectedTokenId : noSelect}
       onMoveToken={sendTokenMove}
       onRuler={outsideActive ? noRuler : sendRuler}
       onLeavePreview={() => setPreviewId(null)}
@@ -352,7 +354,21 @@ export function Home({ user: sessionUser, onLogout }: { user: User; onLogout: ()
             <span className="mono">RODADA {initiative.round}</span>
           </div>
         )}
-        <div className="m-map">{map}</div>
+        <div className="m-map">
+          {map}
+          {selectedToken && (
+            <TokenCard
+              token={selectedToken}
+              selfId={user.id}
+              myCharacter={myCharacter}
+              onOpenSheet={() => {
+                setSelectedTokenId(null);
+                setPlayerTab("ficha");
+              }}
+              onClose={() => setSelectedTokenId(null)}
+            />
+          )}
+        </div>
         {myCharacter && (
           <div className="m-vitals">
             <div style={{ width: 56 }}>

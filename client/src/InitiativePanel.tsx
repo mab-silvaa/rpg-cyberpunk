@@ -1,8 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { Fragment, useState, type FormEvent } from "react";
 import { INITIATIVE_NAME_MAX_LENGTH, type InitiativeView, type TokenView } from "@vtt/shared";
 import { api } from "./api";
 import { Icon } from "./icons";
 import { Badge, Button, ErrorText, MoreMenu, Panel, useConfirm } from "./ui";
+
+/** Quem está derrotado sai da ordem e desce para o grupo "Derrotados" (prancha 16). */
+const splitDefeated = (i: InitiativeView) => ({
+  alive: i.entries.filter((e) => !e.defeated),
+  defeated: i.entries.filter((e) => e.defeated),
+});
 
 const hasCombat = (i: InitiativeView): boolean => i.entries.length > 0 || i.round > 0;
 
@@ -11,6 +17,7 @@ export function InitiativeBar({ initiative, isGm }: { initiative: InitiativeView
   const [error, setError] = useState<string>();
   if (!hasCombat(initiative)) return null;
   const started = initiative.round > 0;
+  const { alive, defeated } = splitDefeated(initiative);
   return (
     <div className="init-bar" aria-label="Iniciativa">
       <div className="init-round">
@@ -19,7 +26,7 @@ export function InitiativeBar({ initiative, isGm }: { initiative: InitiativeView
         </span>
         <b>{started ? initiative.round : "–"}</b>
       </div>
-      {initiative.entries.map((entry, i) => (
+      {alive.map((entry, i) => (
         <div
           key={entry.id}
           className={`init-chip ${entry.id === initiative.activeId ? "active" : ""}`}
@@ -30,6 +37,17 @@ export function InitiativeBar({ initiative, isGm }: { initiative: InitiativeView
           {entry.hidden && <Icon name="eyeoff" size={14} />}
         </div>
       ))}
+      {defeated.length > 0 && (
+        <>
+          <span className="t-label init-defeated-label">Derrotados · {defeated.length}</span>
+          {defeated.map((entry) => (
+            <div key={entry.id} className="init-chip defeated">
+              {entry.name}
+              {entry.hidden && <Icon name="eyeoff" size={14} />}
+            </div>
+          ))}
+        </>
+      )}
       {isGm && started && (
         <Button
           variant="primary"
@@ -53,13 +71,14 @@ export function InitiativeBar({ initiative, isGm }: { initiative: InitiativeView
 /** Iniciativa para os jogadores: só a ordem e quem está na vez. */
 export function InitiativeList({ initiative }: { initiative: InitiativeView }) {
   if (!hasCombat(initiative)) return null;
+  const { alive, defeated } = splitDefeated(initiative);
   return (
     <Panel
       title={`Iniciativa${initiative.round > 0 ? ` · rodada ${initiative.round}` : ""}`}
       count={initiative.entries.length}
     >
       <ol className="list" style={{ listStyle: "none", padding: 0 }}>
-        {initiative.entries.map((entry, i) => (
+        {alive.map((entry, i) => (
           <li
             key={entry.id}
             className="row"
@@ -84,6 +103,21 @@ export function InitiativeList({ initiative }: { initiative: InitiativeView }) {
           </li>
         ))}
       </ol>
+      {defeated.length > 0 && (
+        <details className="defeated-group">
+          <summary className="t-label">Derrotados · {defeated.length}</summary>
+          <ul className="list" style={{ listStyle: "none", padding: 0 }}>
+            {defeated.map((entry) => (
+              <li key={entry.id} className="row defeated">
+                <span className="row-name">
+                  <s>{entry.name}</s>
+                  <Badge tone="danger">Derrotado</Badge>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </Panel>
   );
 }
@@ -130,6 +164,7 @@ export function InitiativeControls({
   }
 
   const started = initiative.round > 0;
+  const { alive, defeated } = splitDefeated(initiative);
   return (
     <Panel
       title={`Combate${started ? ` · rodada ${initiative.round}` : ""}`}
@@ -178,62 +213,67 @@ export function InitiativeControls({
         </Button>
       </div>
       <ol className="list" style={{ listStyle: "none", padding: 0 }}>
-        {initiative.entries.map((entry, i) => (
-          <li
-            key={entry.id}
-            className="row"
-            style={
-              entry.id === initiative.activeId
-                ? { borderColor: "var(--turn)", background: "rgba(255,198,26,0.1)" }
-                : undefined
-            }
-          >
-            <span className="t-mono" style={{ color: "var(--turn)", width: 16 }}>
-              {i + 1}
-            </span>
-            <span className="row-name">
-              {entry.name}
-              {entry.id === initiative.activeId && <Badge tone="turn">Na vez</Badge>}
-              {entry.hidden && (
-                <Badge tone="gm" icon="eyeoff">
-                  Oculta
-                </Badge>
-              )}
-            </span>
-            <span className="control mono" style={{ width: 64, height: 36, flex: "none" }}>
-              <input
-                type="number"
-                aria-label={`Iniciativa de ${entry.name}`}
-                style={{ height: 34, padding: "0 8px", textAlign: "center" }}
-                value={entry.value ?? ""}
-                placeholder="—"
-                onChange={(e) =>
-                  void run(() =>
-                    api.updateInitiative(entry.id, {
-                      value: e.target.value === "" ? null : Number(e.target.value),
-                    }),
-                  )
-                }
+        {[...alive, ...defeated].map((entry, i) => (
+          <Fragment key={entry.id}>
+            {entry.defeated && i === alive.length && (
+              <li className="t-label defeated-heading">Derrotados · {defeated.length}</li>
+            )}
+            <li
+              className={`row ${entry.defeated ? "defeated" : ""}`}
+              style={
+                entry.id === initiative.activeId
+                  ? { borderColor: "var(--turn)", background: "rgba(255,198,26,0.1)" }
+                  : undefined
+              }
+            >
+              <span className="t-mono" style={{ color: "var(--turn)", width: 16 }}>
+                {entry.defeated ? "–" : i + 1}
+              </span>
+              <span className="row-name">
+                {entry.defeated ? <s>{entry.name}</s> : entry.name}
+                {entry.defeated && <Badge tone="danger">Derrotado</Badge>}
+                {entry.id === initiative.activeId && <Badge tone="turn">Na vez</Badge>}
+                {entry.hidden && (
+                  <Badge tone="gm" icon="eyeoff">
+                    Oculta
+                  </Badge>
+                )}
+              </span>
+              <span className="control mono" style={{ width: 64, height: 36, flex: "none" }}>
+                <input
+                  type="number"
+                  aria-label={`Iniciativa de ${entry.name}`}
+                  style={{ height: 34, padding: "0 8px", textAlign: "center" }}
+                  value={entry.value ?? ""}
+                  placeholder="—"
+                  onChange={(e) =>
+                    void run(() =>
+                      api.updateInitiative(entry.id, {
+                        value: e.target.value === "" ? null : Number(e.target.value),
+                      }),
+                    )
+                  }
+                />
+              </span>
+              <MoreMenu
+                label={`Mais ações de ${entry.name}`}
+                items={[
+                  {
+                    label: entry.hidden ? "Mostrar" : "Esconder",
+                    icon: entry.hidden ? "eye" : "eyeoff",
+                    onSelect: () =>
+                      void run(() => api.updateInitiative(entry.id, { hidden: !entry.hidden })),
+                  },
+                  {
+                    label: "Tirar",
+                    icon: "trash",
+                    danger: true,
+                    onSelect: () => void run(() => api.removeInitiative(entry.id)),
+                  },
+                ]}
               />
-            </span>
-            <MoreMenu
-              label={`Mais ações de ${entry.name}`}
-              items={[
-                {
-                  label: entry.hidden ? "Mostrar" : "Esconder",
-                  icon: entry.hidden ? "eye" : "eyeoff",
-                  onSelect: () =>
-                    void run(() => api.updateInitiative(entry.id, { hidden: !entry.hidden })),
-                },
-                {
-                  label: "Tirar",
-                  icon: "trash",
-                  danger: true,
-                  onSelect: () => void run(() => api.removeInitiative(entry.id)),
-                },
-              ]}
-            />
-          </li>
+            </li>
+          </Fragment>
         ))}
       </ol>
       {initiative.entries.length === 0 && (

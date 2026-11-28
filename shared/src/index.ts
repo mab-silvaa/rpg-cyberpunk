@@ -172,7 +172,8 @@ export interface SocketData {
   user: User;
 }
 
-export const NAME_MAX_LENGTH = 32;
+export const NAME_MIN_LENGTH = 2;
+export const NAME_MAX_LENGTH = 24;
 export const SESSION_DAYS = 30;
 
 export const GRID_PX_MIN = 10;

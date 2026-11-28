@@ -6,6 +6,8 @@ export interface InitiativeEntry {
   /** Escondida dos jogadores (por exemplo, um inimigo que ainda não apareceu). */
   hidden: boolean;
   tokenId: number | null;
+  /** O token ligado está derrotado: a entrada sai da ordem e a vez a pula. */
+  defeated: boolean;
 }
 
 /** Iniciativa já na ordem de jogo (maior valor primeiro; sem valor, no fim). */

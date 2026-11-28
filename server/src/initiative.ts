@@ -18,12 +18,13 @@ interface EntryRow {
   hidden: number;
 }
 
-const toEntry = (row: EntryRow): InitiativeEntry => ({
+const toEntry = (row: EntryRow, defeated = false): InitiativeEntry => ({
   id: row.id,
   name: row.name,
   value: row.value,
   hidden: row.hidden === 1,
   tokenId: row.token_id,
+  defeated,
 });
 
 export type ParseResult = { ok: true; value: InitiativeEntryInput } | { ok: false; error: string };
@@ -67,7 +68,11 @@ export function parseEntryInput(body: unknown, creating: boolean): ParseResult {
 }
 
 export class Initiative {
-  constructor(private db: Database.Database) {}
+  /** `isDefeated` diz se o token ligado a uma entrada está derrotado (a vez o pula). */
+  constructor(
+    private db: Database.Database,
+    private isDefeated: (tokenId: number) => boolean = () => false,
+  ) {}
 
   /** Entradas na ordem de jogo: maior valor primeiro, sem valor no fim, empate pela ordem de entrada. */
   entries(): InitiativeEntry[] {
@@ -76,7 +81,11 @@ export class Initiative {
         "SELECT id, name, value, token_id, hidden FROM initiative_entries ORDER BY value IS NULL, value DESC, id",
       )
       .all() as EntryRow[];
-    return rows.map(toEntry);
+    return rows.map((row) => this.entry(row));
+  }
+
+  private entry(row: EntryRow): InitiativeEntry {
+    return toEntry(row, row.token_id !== null && this.isDefeated(row.token_id));
   }
 
   private state(): { round: number; activeId: number | null } {
@@ -110,7 +119,7 @@ export class Initiative {
     const row = this.db
       .prepare("SELECT id, name, value, token_id, hidden FROM initiative_entries WHERE id = ?")
       .get(id) as EntryRow | undefined;
-    return row ? toEntry(row) : null;
+    return row ? this.entry(row) : null;
   }
 
   /** Acrescenta uma entrada. Devolve "limit" se a lista está cheia. */
@@ -178,7 +187,8 @@ export class Initiative {
 
   /** Começa o combate: rodada 1, na vez a primeira entrada. */
   start(): "empty" | null {
-    const first = this.entries()[0];
+    const entries = this.entries();
+    const first = entries.find((e) => !e.defeated) ?? entries[0];
     if (!first) return "empty";
     this.setState(1, first.id);
     return null;
@@ -191,12 +201,22 @@ export class Initiative {
     const entries = this.entries();
     if (entries.length === 0) return "empty";
     const index = entries.findIndex((e) => e.id === activeId);
+    // Quem está derrotado é pulado; se todos estão, a vez anda como de costume.
+    let at = index;
+    let nextRound = round;
+    for (let step = 0; step < entries.length; step++) {
+      at += 1;
+      if (at >= entries.length) {
+        at = 0;
+        nextRound += 1;
+      }
+      if (!entries[at]!.defeated) break;
+    }
     if (index === -1) {
-      this.setState(round, entries[0]!.id);
-    } else if (index + 1 >= entries.length) {
-      this.setState(round + 1, entries[0]!.id);
+      const first = entries.findIndex((e) => !e.defeated);
+      this.setState(round, entries[first === -1 ? 0 : first]!.id);
     } else {
-      this.setState(round, entries[index + 1]!.id);
+      this.setState(nextRound, entries[at]!.id);
     }
     return null;
   }

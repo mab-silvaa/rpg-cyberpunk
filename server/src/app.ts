@@ -17,6 +17,7 @@ import type {
   TunnelInfo,
   User,
 } from "@vtt/shared";
+import { NAME_MAX_LENGTH, NAME_MIN_LENGTH } from "@vtt/shared";
 import type { Config } from "./config.js";
 import {
   createSessionToken,
@@ -112,7 +113,7 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   const scenes = new Scenes(db, images);
   const fog = new Fog(db);
   const rolls = new Rolls(db);
-  const initiative = new Initiative(db);
+  const initiative = new Initiative(db, (tokenId) => tokens.byId(tokenId)?.defeated ?? false);
   const notes = new Notes(db);
   const characters = new Characters(db, users);
   const tokens = new Tokens(db, images, scenes, users, fog);
@@ -121,7 +122,7 @@ export function createApp(config: Config, db: Database.Database): AppContext {
 
   const httpServer = http.createServer(app);
   const io: VttServer = new Server(httpServer);
-  const tokenHub = new TokenHub(io, tokens);
+  const tokenHub = new TokenHub(io, tokens, () => broadcastInitiative());
   const characterHub = new CharacterHub(io);
   // Mudou a ficha: os tokens ligados a ela mostram o HP novo.
   const onCharacterChanged = (id: number, tokenIds?: number[]): void => {
@@ -143,7 +144,8 @@ export function createApp(config: Config, db: Database.Database): AppContext {
   app.post("/api/login", (req, res) => {
     const body = (req.body ?? {}) as Partial<LoginRequest>;
     const name = normalizeName(body.name);
-    if (!name) return fail(res, 400, "Digite um nome de 1 a 32 caracteres");
+    if (!name)
+      return fail(res, 400, `Digite um nome de ${NAME_MIN_LENGTH} a ${NAME_MAX_LENGTH} caracteres`);
 
     let user: User;
     if (body.gm) {
@@ -208,7 +210,8 @@ export function createApp(config: Config, db: Database.Database): AppContext {
     if (!self.isGm && id !== self.id) return fail(res, 403, "Só o mestre faz isso");
     const name = normalizeName((req.body as { name?: unknown } | undefined)?.name);
     if (!users.byId(id)) return fail(res, 404, "Usuário não encontrado");
-    if (!name) return fail(res, 400, "Digite um nome de 1 a 32 caracteres");
+    if (!name)
+      return fail(res, 400, `Digite um nome de ${NAME_MIN_LENGTH} a ${NAME_MAX_LENGTH} caracteres`);
     if (!users.rename(id, name)) return fail(res, 409, "Esse nome já está em uso");
     res.json(presenceList());
     broadcastPresence();

@@ -430,139 +430,6 @@ export function CharacterSheet({ character, onSave, onRoll, readOnly }: Props) {
             </span>
           </div>
 
-          <h4 className="p-strip">Armas</h4>
-          <div className="p-table">
-            <div className="p-row p-head weapons">
-              <span className="grow">Arma</span>
-              <span className="w-skill">Skill</span>
-              <span className="w-dmg">Dano</span>
-              <span className="w-ammo">Munição</span>
-              <span className="p-actions" />
-            </div>
-            {data.weapons.map((weapon, i) => {
-              const update = (change: Partial<typeof weapon>) =>
-                edit(
-                  "weapons",
-                  data.weapons.map((w, j) => (j === i ? { ...w, ...change } : w)),
-                );
-              const attack = attackTotal(weapon.skill);
-              return (
-                <div className="p-row weapons" key={i}>
-                  <span className="p-cell grow">
-                    <input
-                      aria-label="Arma"
-                      placeholder="Arma"
-                      value={weapon.name}
-                      maxLength={40}
-                      disabled={ro}
-                      onChange={(e) => update({ name: e.target.value })}
-                    />
-                  </span>
-                  <span className="p-cell w-skill">
-                    <input
-                      aria-label="Skill da arma"
-                      placeholder="Skill"
-                      list="skill-names"
-                      value={weapon.skill}
-                      maxLength={40}
-                      disabled={ro}
-                      onChange={(e) => update({ skill: e.target.value })}
-                    />
-                  </span>
-                  <span className="p-cell w-dmg mono">
-                    <input
-                      aria-label="Dano"
-                      value={weapon.damage}
-                      maxLength={30}
-                      placeholder="3d6"
-                      disabled={ro}
-                      onChange={(e) => update({ damage: e.target.value })}
-                    />
-                  </span>
-                  <span className="p-cell w-ammo mono ammo">
-                    <input
-                      aria-label="Munição"
-                      type="number"
-                      min={0}
-                      max={999}
-                      value={weapon.ammo}
-                      disabled={ro}
-                      onChange={(e) => update({ ammo: Math.trunc(Number(e.target.value)) || 0 })}
-                    />
-                    <span>/</span>
-                    <input
-                      aria-label="Carregador"
-                      type="number"
-                      min={0}
-                      max={999}
-                      value={weapon.ammoMax}
-                      disabled={ro}
-                      onChange={(e) => update({ ammoMax: Math.trunc(Number(e.target.value)) || 0 })}
-                    />
-                  </span>
-                  <span className="p-actions">
-                    <IconButton
-                      icon="dice"
-                      size="sm"
-                      variant="ghost"
-                      label={`Atacar com ${weapon.name || "arma"}${attack === null ? " (skill não encontrada: +0)" : ` (+${attack})`}`}
-                      onClick={() => roll(checkExpression(attack ?? 0), `Ataque: ${weapon.name}`)}
-                    />
-                    <IconButton
-                      icon="heart"
-                      size="sm"
-                      variant="ghost"
-                      label={`Rolar dano de ${weapon.name || "arma"}`}
-                      disabled={!weapon.damage}
-                      onClick={() => roll(weapon.damage, `Dano: ${weapon.name}`)}
-                    />
-                    {!ro && (
-                      <IconButton
-                        icon="trash"
-                        size="sm"
-                        variant="ghost"
-                        label={`Tirar ${weapon.name || "arma"}`}
-                        onClick={() => removeAt("weapons", i)}
-                      />
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-            {Array.from({ length: Math.max(0, 2 - data.weapons.length) }, (_, n) => (
-              <div className="p-row blank" key={`b${n}`} aria-hidden="true" />
-            ))}
-          </div>
-          <datalist id="skill-names">
-            {skillNames.map((n) => (
-              <option key={n} value={n} />
-            ))}
-          </datalist>
-          {!ro && (
-            <div className="p-add">
-              <Button
-                size="sm"
-                icon="plus"
-                onClick={() =>
-                  edit("weapons", [
-                    ...data.weapons,
-                    {
-                      name: "Nova arma",
-                      skill: "",
-                      damage: "",
-                      rof: 1,
-                      ammo: 0,
-                      ammoMax: 0,
-                      notes: "",
-                    },
-                  ])
-                }
-              >
-                Nova arma
-              </Button>
-            </div>
-          )}
-
           <h4 className="p-strip">Cyberware</h4>
           <div className="p-table">
             <div className="p-row p-head cyber">
@@ -668,6 +535,171 @@ export function CharacterSheet({ character, onSave, onRoll, readOnly }: Props) {
               </Button>
               <Button size="sm" onClick={addDefaultSkills}>
                 Acrescentar as skills do jogo
+              </Button>
+            </div>
+          )}
+
+          <h4 className="p-strip">Armas</h4>
+          <div className="p-table">
+            <div className="p-row p-head weapons">
+              <span className="grow">Arma</span>
+              <span className="w-skill">Skill</span>
+              <span className="w-dmg">Dano</span>
+              <span className="w-rof">ROF</span>
+              <span className="w-ammo">Munição</span>
+              <span className="w-notes">Notas</span>
+              <span className="p-actions" />
+            </div>
+            {data.weapons.map((weapon, i) => {
+              const update = (change: Partial<typeof weapon>) =>
+                edit(
+                  "weapons",
+                  data.weapons.map((w, j) => (j === i ? { ...w, ...change } : w)),
+                );
+              const attack = attackTotal(weapon.skill);
+              // A skill foi apagada da ficha: a arma fica em erro até escolher outra.
+              const missingSkill = weapon.skill !== "" && !skillNames.includes(weapon.skill);
+              return (
+                <div className={`p-row weapons${missingSkill ? " invalid" : ""}`} key={i}>
+                  <span className="p-cell grow w-name">
+                    <input
+                      aria-label="Arma"
+                      placeholder="Arma"
+                      value={weapon.name}
+                      maxLength={40}
+                      disabled={ro}
+                      onChange={(e) => update({ name: e.target.value })}
+                    />
+                  </span>
+                  <span className={`p-cell w-skill${missingSkill ? " invalid" : ""}`}>
+                    <select
+                      aria-label="Skill da arma"
+                      aria-invalid={missingSkill || undefined}
+                      value={missingSkill ? "" : weapon.skill}
+                      disabled={ro}
+                      onChange={(e) => update({ skill: e.target.value })}
+                    >
+                      <option value="">Escolher skill</option>
+                      {skillNames.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                  <span className="p-cell w-dmg mono">
+                    <input
+                      aria-label="Dano"
+                      value={weapon.damage}
+                      maxLength={30}
+                      placeholder="3d6"
+                      disabled={ro}
+                      onChange={(e) => update({ damage: e.target.value })}
+                    />
+                  </span>
+                  <span className="p-cell w-rof mono">
+                    <input
+                      aria-label="ROF"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={10}
+                      step={1}
+                      value={weapon.rof}
+                      disabled={ro}
+                      onChange={(e) => update({ rof: Math.trunc(Number(e.target.value)) || 0 })}
+                    />
+                  </span>
+                  <span className="p-cell w-ammo mono ammo">
+                    <input
+                      aria-label="Munição"
+                      type="number"
+                      min={0}
+                      max={999}
+                      value={weapon.ammo}
+                      disabled={ro}
+                      onChange={(e) => update({ ammo: Math.trunc(Number(e.target.value)) || 0 })}
+                    />
+                    <span>/</span>
+                    <input
+                      aria-label="Carregador"
+                      type="number"
+                      min={0}
+                      max={999}
+                      value={weapon.ammoMax}
+                      disabled={ro}
+                      onChange={(e) => update({ ammoMax: Math.trunc(Number(e.target.value)) || 0 })}
+                    />
+                  </span>
+                  <span className="p-cell w-notes">
+                    <input
+                      aria-label="Notas da arma"
+                      placeholder="Notas"
+                      value={weapon.notes}
+                      maxLength={CHARACTER_LIMITS.textShort}
+                      disabled={ro}
+                      onChange={(e) => update({ notes: e.target.value })}
+                    />
+                  </span>
+                  <span className="p-actions">
+                    <IconButton
+                      icon="dice"
+                      size="sm"
+                      variant="ghost"
+                      label={`Atacar com ${weapon.name || "arma"}${attack === null ? " (skill não encontrada: +0)" : ` (+${attack})`}`}
+                      onClick={() => roll(checkExpression(attack ?? 0), `Ataque: ${weapon.name}`)}
+                    />
+                    <IconButton
+                      icon="heart"
+                      size="sm"
+                      variant="ghost"
+                      label={`Rolar dano de ${weapon.name || "arma"}`}
+                      disabled={!weapon.damage}
+                      onClick={() => roll(weapon.damage, `Dano: ${weapon.name}`)}
+                    />
+                    {!ro && (
+                      <IconButton
+                        icon="trash"
+                        size="sm"
+                        variant="ghost"
+                        label={`Tirar ${weapon.name || "arma"}`}
+                        onClick={() => removeAt("weapons", i)}
+                      />
+                    )}
+                  </span>
+                  {missingSkill && (
+                    <span className="p-error" role="alert">
+                      Escolha uma skill da ficha.
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {Array.from({ length: Math.max(0, 2 - data.weapons.length) }, (_, n) => (
+              <div className="p-row blank" key={`b${n}`} aria-hidden="true" />
+            ))}
+          </div>
+          {!ro && (
+            <div className="p-add">
+              <Button
+                size="sm"
+                icon="plus"
+                onClick={() =>
+                  edit("weapons", [
+                    ...data.weapons,
+                    {
+                      name: "Nova arma",
+                      skill: "",
+                      damage: "",
+                      rof: 1,
+                      ammo: 0,
+                      ammoMax: 0,
+                      notes: "",
+                    },
+                  ])
+                }
+              >
+                Nova arma
               </Button>
             </div>
           )}

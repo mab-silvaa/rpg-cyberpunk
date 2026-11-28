@@ -3,6 +3,8 @@ import {
   TOKEN_NAME_MAX_LENGTH,
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
+  type CharacterData,
+  type CharacterReply,
   type CharacterView,
   type ImageInfo,
   type PresenceUser,
@@ -36,6 +38,8 @@ interface Props {
   onSelect: (id: number | null) => void;
   onChange: (token: TokenView) => void;
   onRemove: (id: number) => void;
+  /** Grava na ficha (usado para o hostil voltar com 1 de HP ao ser revivido). */
+  onSaveCharacter: (id: number, patch: Partial<CharacterData>) => Promise<CharacterReply>;
 }
 
 interface FormValues {
@@ -226,6 +230,7 @@ export function TokensPanel({
   onSelect,
   onChange,
   onRemove,
+  onSaveCharacter,
 }: Props) {
   const confirm = useConfirm();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -273,6 +278,20 @@ export function TokensPanel({
     }
   }
 
+  /** Marca ou desfaz "derrotado". Reviver um hostil que caiu por HP zero devolve 1 de HP à ficha. */
+  async function setDefeated(token: TokenView, defeated: boolean) {
+    setError(undefined);
+    try {
+      if (!defeated && token.hp !== null && token.hp.current <= 0 && token.characterId !== null) {
+        const reply = await onSaveCharacter(token.characterId, { hpCurrent: 1 });
+        if (!reply.ok) throw new Error(reply.error);
+      }
+      onChange(await api.updateToken(token.id, { defeated }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível reviver.");
+    }
+  }
+
   const ownerName = (token: TokenView): string | undefined =>
     players.find((p) => p.id === token.ownerId)?.name;
 
@@ -285,7 +304,9 @@ export function TokensPanel({
       <ul className="list">
         {tokens.map((token) => (
           <li key={token.id}>
-            <div className={`row ${selectedId === token.id ? "selected" : ""}`}>
+            <div
+              className={`row ${selectedId === token.id ? "selected" : ""} ${token.defeated ? "defeated" : ""}`}
+            >
               <span className="row-name">
                 <button
                   type="button"
@@ -303,10 +324,30 @@ export function TokensPanel({
                 {ownerName(token) && <Badge tone="accent">{ownerName(token)}</Badge>}
                 {token.ownerId === null && <Badge>NPC</Badge>}
                 {token.hostile && <Badge tone="danger">Hostil</Badge>}
+                {token.defeated && <Badge tone="danger">Derrotado</Badge>}
               </span>
+              {token.defeated && token.ownerId === null && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon="refresh"
+                  onClick={() => void setDefeated(token, false)}
+                >
+                  Reviver
+                </Button>
+              )}
               <MoreMenu
                 label={`Mais ações de ${token.name}`}
                 items={[
+                  ...(token.ownerId === null && !token.defeated
+                    ? [
+                        {
+                          label: "Marcar derrotado",
+                          icon: "x" as const,
+                          onSelect: () => void setDefeated(token, true),
+                        },
+                      ]
+                    : []),
                   {
                     label: "Editar",
                     icon: "note",

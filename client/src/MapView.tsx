@@ -433,7 +433,9 @@ export function MapView({
             )}
             {fog?.enabled && <FogLayer shapes={fog.shapes} map={map} translucent={isGm} />}
             {[...tokens]
-              .sort((a, b) => b.size - a.size || a.id - b.id)
+              .sort(
+                (a, b) => Number(b.defeated) - Number(a.defeated) || b.size - a.size || a.id - b.id,
+              )
               .map((token) => (
                 <TokenShape
                   key={token.id}

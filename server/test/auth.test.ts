@@ -33,7 +33,9 @@ describe("login de jogador", () => {
 
   it("recusa nomes vazios e longos demais", async () => {
     expect((await loginPlayer("   ")).status).toBe(400);
-    expect((await loginPlayer("x".repeat(33))).status).toBe(400);
+    expect((await loginPlayer("x")).status).toBe(400);
+    expect((await loginPlayer("x".repeat(25))).status).toBe(400);
+    expect((await loginPlayer("x".repeat(24))).status).toBe(200);
   });
 
   it("a sessão não vale se o cookie for adulterado", async () => {

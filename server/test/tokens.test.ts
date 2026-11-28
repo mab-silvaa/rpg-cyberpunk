@@ -146,6 +146,34 @@ describe("criar e editar tokens", () => {
     expect(patched.body.hostile).toBe(false);
   });
 
+  it("derrotado: manual para NPC, automático para hostil com HP zero, nunca para jogador", async () => {
+    const patch = (id: number, body: object) =>
+      api<TokenView>(server, "PATCH", `/api/tokens/${id}`, { cookie: gm, body });
+
+    // NPC aliado: só pela marca do mestre, que também desfaz.
+    const ally = (await createToken({ name: "Guarda" })).body;
+    expect(ally.defeated).toBe(false);
+    expect((await patch(ally.id, { defeated: true })).body.defeated).toBe(true);
+    expect((await patch(ally.id, { defeated: false })).body.defeated).toBe(false);
+    expect((await patch(ally.id, { defeated: "sim" })).status).toBe(400);
+
+    // Token de jogador nunca fica derrotado, nem se o mestre marcar.
+    const player = (await createToken({ ownerId: ritaId })).body;
+    expect((await patch(player.id, { defeated: true })).body.defeated).toBe(false);
+
+    // Hostil: cai sozinho quando a ficha chega a zero de HP, e o jogador sabe disso sem ver o HP.
+    const sheet = await api<{ id: number }>(server, "POST", "/api/characters", {
+      cookie: gm,
+      body: { ownerId: null, data: { hpCurrent: 0 } },
+    });
+    const enemy = (
+      await createToken({ name: "Capanga", hostile: true, characterId: sheet.body.id })
+    ).body;
+    expect(enemy).toMatchObject({ defeated: true, condition: "down" });
+    const seen = (await open(rita)).snapshot.tokens.find((t) => t.id === enemy.id);
+    expect(seen).toMatchObject({ defeated: true, condition: "down", hp: null });
+  });
+
   it("mantém o centro dentro do mapa", async () => {
     const res = await createToken({ x: 5000, y: -20 });
     expect(res.body).toMatchObject({ x: 1000, y: 0 });

@@ -143,6 +143,7 @@ export function GmPanel(props: Props) {
               onSelect={props.onSelectToken}
               onChange={props.onTokenChange}
               onRemove={props.onTokenRemove}
+              onSaveCharacter={props.onSaveCharacter}
             />
             <NpcPanel
               scene={props.shownScene}

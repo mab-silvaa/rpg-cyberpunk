@@ -76,8 +76,8 @@ export function TokenShape({
   const r = Math.max(token.size * gridPx * RADIUS_PER_SQUARE, MIN_RADIUS_PX / scale);
   const npc = token.ownerId === null;
   const px = 1 / scale;
-  // Derrotado: só para hostis, derivado do HP em zero (o design não define um campo próprio).
-  const defeated = token.hostile && token.hp !== null && token.hp.max > 0 && token.hp.current <= 0;
+  // Derrotado (prancha 16): hostil com HP zero cai sozinho, NPC aliado só pelo mestre; o servidor decide.
+  const defeated = token.defeated;
   const canDrag = draggable && !defeated;
 
   // Recorta o centro quadrado da imagem, para ela preencher a forma sem esticar.
